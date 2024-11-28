@@ -1,0 +1,19 @@
+Sub AutoFitMergedCellRowHeight(Target As Range)
+Dim cWdth As Single, MrgeWdth As Single, NewRwHt As Single, Tmp As Single
+Dim c As Range, cc As Range, ma As Range
+If Target.MergeCells And Target.WrapText Then
+    Application.ScreenUpdating = False
+    Set c = Target.Cells(1, 1)
+    With c
+        cWdth = .ColumnWidth:  Set ma = .MergeArea
+        For Each cc In ma.Resize(1)
+            Tmp = cc.ColumnWidth
+            MrgeWdth = MrgeWdth + Tmp + 0.45 * IIf(Tmp <= 0.6, Tmp / 0.67, 1.1)
+        Next cc
+        ma.MergeCells = False:  .ColumnWidth = MrgeWdth
+        .EntireRow.AutoFit:     NewRwHt = .RowHeight / ma.Rows.Count:  .ColumnWidth = cWdth
+        ma.MergeCells = True:   ma.RowHeight = NewRwHt
+    End With
+    Application.ScreenUpdating = True
+End If
+End Sub
