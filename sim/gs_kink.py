@@ -71,7 +71,8 @@ def one(N, rng, B, ylag, qlag, trim, ngrid, nci):
 
 if __name__ == '__main__':
     N, R, B, lab = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
-    cfg = {'supp': (2, 3, .15, 199, 100), 'gs': (None, None, .10, 46, 46)}[lab]
+    cfg = {'supp': (2, 3, .15, 199, 100), 'gs': (None, None, .10, 46, 46),
+           'gs100': (None, None, .10, 46, 100), 'gs200': (None, None, .10, 46, 200)}[lab]
     rng = np.random.default_rng(99 + N + len(lab))
     res = np.array([one(N, rng, B, *cfg) for _ in range(R)], dtype=float)
     pw, un, hu, dc, ln, gh = res.mean(0)[0], res[:, 1].mean(), res[:, 2].mean(), res[:, 3].mean(), np.nanmean(res[:, 4]), res[:, 5]
