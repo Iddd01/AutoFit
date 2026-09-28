@@ -28,6 +28,8 @@ next to its length and boundary rate. Worker and merger check that the hull
 equals the first/last segment ends and that every segment hit is a hull hit.
 
 The core design is documented in [_DESIGN_B.md](_DESIGN_B.md).
+Supplement 2 (continuity 0.9.35 vs 0.9.36 at kappa 0–3; threshold-test power in
+the Gong–Seo Table 2 layout) is documented in [SUPP2.md](SUPP2.md).
 The targeted blocks and their launcher are in [SUPPLEMENT.md](SUPPLEMENT.md).
 Do not merge supplement rows into the core summaries.
 

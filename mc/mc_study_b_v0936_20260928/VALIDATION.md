@@ -51,3 +51,10 @@ not modified.
 Smoke results test execution, schema, accounting, seed and merge contracts.
 They are not Monte Carlo performance evidence. Formal results require new runs
 with no smoke overrides.
+
+## Supplement 2 (added 28 September 2026)
+
+`supp2_*` files, `run_supp2.ps1` and the exact 0.9.35 release
+(`xtdpthresh_v0935.ado`) were added for SUPP2.md. They have not yet been run;
+a smoke (`-RepCap 1 -B 19 -Grid 10 -GridCI 10`) must pass before the formal
+run. Core and kink-supplement files are unchanged by this addition.
