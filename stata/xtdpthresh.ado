@@ -11071,6 +11071,9 @@ end
 *   posted: the VCE, Hansen J and the wild bootstrap cluster on the unit.
 *   Estimates, confidence sets, citest() and the linearity p-value equal
 *   0.9.36 (each bootstrap component has its own seed).
+*   (h) The help file documents only the procedures evaluated in Nguyen and
+*   Lai (2026). static, td, boottype(unit), coefboot()/coefcitype() and
+*   conttest remain in the code but are no longer documented.
 * ---------------------------------------------------------------------------
 * v0.9.36 (28sep2026): continuity-test power; threshold-test diagnostic.
 *   (a) Continuity-test power. The bootstrap DGP used the restricted (kink)

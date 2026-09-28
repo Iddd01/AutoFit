@@ -47,8 +47,6 @@ sets for the threshold{p_end}
 {synopt:{opt pred:etermined(varlist)}}predetermined regressors; instrumented by levels from t-1 (t under FOD){p_end}
 {synopt:{opt exo:genous(varlist)}}additional strictly exogenous regressors{p_end}
 {synopt:{opt kink}}impose continuity of the regression function at the threshold{p_end}
-{synopt:{opt static}}do not add L.{it:depvar} as a regressor{p_end}
-{synopt:{opt td}}partial common time effects out of the estimating equations{p_end}
 {synopt:{opt hist:ory(panel|sample)}}whether {cmd:if} and {cmd:in} also bound the lag history; default is {cmd:panel}{p_end}
 
 {syntab:Instruments}
@@ -68,20 +66,14 @@ sets for the threshold{p_end}
 {syntab:Inference}
 {synopt:{opt gridci(#)}}number of candidate thresholds in the confidence-set grid; default is {cmd:gridci(100)}{p_end}
 {synopt:{opt boot(#)}}number of bootstrap replications; default is {cmd:boot(299)}{p_end}
-{synopt:{opt boott:ype(wild|unit)}}bootstrap scheme for the threshold confidence set; default is {cmd:wild}{p_end}
 {synopt:{opt rseed(#)}}seed for reproducible bootstrap draws{p_end}
 {synopt:{opt noboot}}skip all bootstrap inference{p_end}
 {synopt:{opt notest}}skip the bootstrap linearity test{p_end}
-{synopt:{opt conttest}}also run the bootstrap continuity test{p_end}
 {synopt:{opt citest(#)}}run the pointwise bootstrap test H0: gamma = #{p_end}
 {synopt:{opt vce(robust|windmeijer)}}variance estimator for the slope coefficients; default is {cmd:robust}{p_end}
 {synopt:{opt bw:scale(#)}}scale of the kernel bandwidth of the jump model's joint variance; default is {cmd:bwscale(1.5)}{p_end}
 {synopt:{opt nocenter}}use the uncentered moment covariance{p_end}
 {synopt:{opt l:evel(#)}}set confidence level; default is {cmd:level(95)}{p_end}
-
-{syntab:Legacy}
-{synopt:{opt coefb:oot(none|onestep|twostep)}}coefficient bootstrap; default is {cmd:none}{p_end}
-{synopt:{opt coefci:type(symmetric|percentile)}}form of the coefficient-bootstrap intervals; default is {cmd:symmetric}{p_end}
 
 {syntab:Reporting}
 {synopt:{opt nowarn}}suppress nonfatal warnings and most notes{p_end}
@@ -98,7 +90,7 @@ You must {cmd:xtset} your data before using {cmd:xtdpthresh}; see
 {it:indepvars} and the variable lists in {opt endogenous()},
 {opt predetermined()}, {opt exogenous()}, and {opt iv()} may contain
 time-series operators; {it:depvar} may not. Lags of {it:depvar} used as
-regressors belong in {opt predetermined()}; see {opt static}. Differences,
+regressors belong in {opt predetermined()}. Differences,
 seasonal differences, and leads of {it:depvar} (D., S., F.) contain its
 current or a future value and are rejected in every list; {opt iv()} may
 contain only lags of {it:depvar}, subject to the rule given under
@@ -154,8 +146,7 @@ approximation to their algorithm that their results do not cover: it draws
 one wild weight per panel unit and holds the weight matrix of the estimator
 fixed; see {help xtdpthresh##bootstrap:Bootstrap algorithm}. The command also reports a
 bootstrap linearity test, the Hansen J statistic, and the Arellano-Bond AR(1)
-and AR(2) tests; the continuity test of Gong and Seo (2026) is available on
-request ({opt conttest}).
+and AR(2) tests.
 
 {pstd}
 The methods, a Monte Carlo study, and worked examples are described in
@@ -200,25 +191,6 @@ the interval between the grid points next to the grid minimum
 errors include the estimation error of γ̂; see {opt vce()}.
 
 {phang}
-{opt static} fits a static model: L.{it:depvar} is not added as a regressor.
-A lag of {it:depvar} used as a regressor must then be declared in
-{opt predetermined()}, as in {cmd:static predetermined(L.y)}; it is not
-strictly exogenous and is rejected in {it:indepvars} or {opt exogenous()}. A
-lag stored as a separate variable cannot be recognized, so do not list it in
-{it:indepvars}.
-
-{phang}
-{opt td} removes common time effects by partialling time dummies out of the
-transformed dependent variable, regressors (including the regime
-interactions), and instruments. Under {cmd:method(fod)}, and under
-{cmd:method(fd)} when every unit has an equation in every period, the
-estimates equal those obtained with the dummies among the regressors and
-instruments; otherwise the two are asymptotically equivalent. The Windmeijer standard errors and the
-Arellano-Bond statistics can differ slightly from that specification.
-{opt td} cannot be combined with {cmd:boottype(unit)} or
-{cmd:coefboot(twostep)}.
-
-{phang}
 {opt history(panel|sample)} determines how {cmd:if} and {cmd:in} are
 applied. Under {cmd:history(panel)}, the default, they restrict the
 estimating equations, and observations outside the restriction remain
@@ -260,8 +232,7 @@ takes one value for every unit in a period, such as a macro variable or a
 trend, is identified through the constants (i). Its own instrument columns
 repeat the constants and are dropped; the output reports how many
 ({cmd:e(N_iv_common)}). The variable must be exactly equal across units, for
-example merged by period, and is best declared among the regressors. Under
-{opt td}, it is removed by the time effects and rejected.
+example merged by period, and is best declared among the regressors.
 
 {pstd}
 {it:Dependent instrument columns.} Other instrument columns whose residual
@@ -311,8 +282,7 @@ that row.
 {cmd:xthenreg}, with the first-step weight matrix of Arellano and Bond
 (1991). {cmd:fod} uses forward orthogonal deviations (Arellano and Bover
 1995) with the first-step weight (Z'Z)^(-1). An interior gap removes three
-FD equations and two FOD equations in a dynamic model (two and one in a
-static model).
+FD equations and two FOD equations.
 
 {phang}
 {opt grid(#)} sets the number of grid points for the threshold search; the
@@ -362,32 +332,17 @@ set; the default is 100 and the minimum 10.
 set and each bootstrap test; the default is 299 and the minimum 10.
 
 {phang}
-{opt boottype(wild|unit)} selects the bootstrap for the confidence set.
-{cmd:wild}, the default, is described in
-{help xtdpthresh##bootstrap:Bootstrap algorithm}. {cmd:unit} resamples panel
-units and is provided only to check the default against a scheme closer to
-Algorithm 1 of Gong and Seo (2026); it requires {cmd:method(fd)} and the
-jump model, cannot be combined with {opt td}, and is much slower. The two
-tests always use the wild bootstrap.
-
-{phang}
 {opt rseed(#)} sets the seed, from which separate seeds are derived for the
-confidence set, the two tests, {opt citest()}, and the coefficient bootstrap, so that
+confidence set, the linearity test, and {opt citest()}, so that
 changing one of them leaves the draws of the others unchanged. The seed is
 not restored after the command. Under {cmd:set rng mt64s}, results also
 depend on {cmd:set rngstream}.
 
 {phang}
-{opt noboot} skips the confidence set and both bootstrap tests.
+{opt noboot} skips the confidence set and the linearity test.
 
 {phang}
 {opt notest} skips the linearity test.
-
-{phang}
-{opt conttest} also runs the bootstrap continuity test described below. It
-requires q to be a contemporaneous regressor and is not allowed with
-{opt kink}, {opt noboot}, or {opt notest}. It has its own derived seed, so
-requesting it does not change the other results.
 
 {phang}
 {opt citest(#)} runs the confidence-set bootstrap test only at gamma = #.
@@ -424,16 +379,6 @@ and {cmd:xthenreg}.
 {phang}
 {opt level(#)} sets the confidence level; the default is {cmd:level(95)} or
 as set by {helpb set level}.
-
-{dlgtab:Legacy}
-
-{phang}
-{opt coefboot(none|onestep|twostep)} and
-{opt coefcitype(symmetric|percentile)} request a bootstrap of the slope
-coefficients that repeats the threshold search in each draw
-({cmd:e(b_bootci)}). They are kept for compatibility, are not part of the
-supported methods, and are not the coefficient bootstrap of Gong and Seo
-(2026).
 
 {dlgtab:Reporting}
 
@@ -560,7 +505,7 @@ weight matrix and grid.{p_end}
 {phang2}
 5. {it:Decision.} Accept γ_ℓ if D_n(γ_ℓ) does not exceed the k-th smallest
 of the D*_n,b(γ_ℓ), with k = ceil(p·(B + 1)) and p = {opt level()}/100, that
-is, if the bootstrap p-value (1 + R)/(1 + B), defined as for the tests below,
+is, if the bootstrap p-value (1 + R)/(1 + B), defined as for the linearity test below,
 exceeds 1 - p. If B < p/(1 - p), every candidate is accepted. If a draw is
 not valid (a statistic is not finite), γ_ℓ is unresolved. With any
 unresolved γ_ℓ, no confidence set is reported ({cmd:e(ci_incomplete)} =
@@ -584,8 +529,7 @@ matrix in every draw, and is proved valid (their Theorem 5; uniformly, for a
 simplified model, their Theorem I.1). The default scheme above, with wild
 weights, the restricted residuals, and the weight matrix held fixed, is a
 faster approximation that these results do not cover; its coverage is
-examined by simulation in Nguyen and Lai (2026). {cmd:boottype(unit)} is
-closer to Algorithm 1 and serves to check it.
+examined by simulation in Nguyen and Lai (2026).
 
 
 {marker tests}{...}
@@ -598,19 +542,8 @@ over the initial grid; bootstrap samples are drawn from the linear fit, as in
 the algorithm above. This GMM distance test differs from the sup-Wald test of
 Seo and Shin (2016) reported by {cmd:xthenreg}.
 
-{phang}
-{bf:Continuity test} (H0: the kink restriction holds). The statistic is the
-minimum criterion of the kink model minus that of the jump model, both over
-the initial grid. With a two-step fit, both models use the fixed second-step
-weight of the jump fit; after a one-step fallback they use the first-step
-weight. Bootstrap outcomes equal the fitted kink model plus unrestricted
-jump residuals. It is a fast wild-bootstrap version of the test of Gong and
-Seo (2026, sec. 4.3). A large p-value may
-reflect low power. The test is run only with {opt conttest}; it requires q to
-be a regressor and is not available with {opt kink}.
-
 {pstd}
-The p-values of the tests are (1 + R)/(1 + B), where R is the number of
+The p-value is (1 + R)/(1 + B), where R is the number of
 draws whose statistic is at least as large as the sample statistic; if a draw
 is not valid, no p-value is reported.
 
@@ -662,10 +595,8 @@ takes fewer than 10 distinct values within two bandwidths of γ̂
 
 {phang}
 {bf:Regressors removed by the transformation.} A regressor that does not
-vary over time within units, or, under {opt td}, one that is common to all
-units in each period or has the form a_i + g_t (such as firm age), is
-removed by the transformation and the time effects and is rejected with
-error 498.
+vary over time within units is removed by the transformation and is
+rejected with error 498.
 
 {phang}
 {bf:Fallbacks.} If the second step cannot be completed (a singular
@@ -690,7 +621,7 @@ estimates. The differences are as follows:
 {phang}
 {cmd:*} the threshold variable is given in {opt qx()};{p_end}
 {phang}
-{cmd:*} {cmd:method(fod)}, {opt td}, and the instrument options
+{cmd:*} {cmd:method(fod)} and the instrument options
 {opt maxlag()}, {opt collapse}, and {opt iv()} are added, and regressors can
 be declared predetermined or endogenous; strictly exogenous regressors are
 instrumented by their transformed values, whereas the {cmd:exogenous()}
@@ -761,11 +692,6 @@ Full inference: threshold confidence set and linearity test, with a seed
 for reproducibility{p_end}
 {phang2}{cmd:. xtdpthresh invest tobin_q cashflow debt, qx(debt) maxlag(2 4) rseed(12345)}{p_end}
 
-{pstd}
-Adding the continuity test; a small {cmd:e(pval_cont)} favors the jump
-model{p_end}
-{phang2}{cmd:. xtdpthresh invest tobin_q cashflow debt, qx(debt) maxlag(2 4) rseed(12345) conttest}{p_end}
-{phang2}{cmd:. display e(pval_cont)}{p_end}
 
 {pstd}
 Cash flow treated as endogenous{p_end}
@@ -814,8 +740,7 @@ A statistic must be specified. {cmd:residuals} and {cmd:xb} are defined for
 the estimation rows ({cmd:e(sample)}), {cmd:arresiduals} for the rows of the
 first-difference equations. They are the series computed during estimation,
 not recomputed, so use {cmd:arresiduals} to reproduce the AR statistics under
-{cmd:method(fod)}. Under {opt td}, they are those of the equations after the
-time effects are partialled out. The 20 most recent fits are kept, so {cmd:estimates restore}
+{cmd:method(fod)}. The 20 most recent fits are kept, so {cmd:estimates restore}
 works. {cmd:predict} exits with error 459 if the data have changed since the
 fit, and with error 498 if the fit is no longer in memory (for example after
 {cmd:mata clear}).{p_end}
@@ -853,7 +778,6 @@ fit, and with error 498 if the fit is no longer in memory (for example after
 {synopt:{cmd:e(boundary_warn)}}bound at the edge of the confidence-set grid: 0 none, 1 lower, 2 upper, 3 both{p_end}
 {synopt:{cmd:e(level)}}confidence level{p_end}
 {synopt:{cmd:e(pval_lin)}}p-value of the linearity test{p_end}
-{synopt:{cmd:e(pval_cont)}}p-value of the continuity test ({opt conttest}){p_end}
 {synopt:{cmd:e(citest_gamma)}}null threshold supplied in {opt citest()}{p_end}
 {synopt:{cmd:e(citest_D)}}pointwise threshold-test statistic{p_end}
 {synopt:{cmd:e(citest_crit)}}bootstrap critical value; missing for mechanical acceptance{p_end}
@@ -898,7 +822,7 @@ fit, and with error 498 if the fit is no longer in memory (for example after
 {synopt:{cmd:e(vce)}}{cmd:robust} or {cmd:windmeijer}{p_end}
 {synopt:{cmd:e(clustvar)}}panel variable (the cluster variable){p_end}
 {synopt:{cmd:e(vcetype)}}title used to label Std. err.{p_end}
-{synopt:{cmd:e(boottype)}}{cmd:wild} or {cmd:unit}{p_end}
+{synopt:{cmd:e(boottype)}}{cmd:wild}{p_end}
 {synopt:{cmd:e(ci_criterion)}}criterion of the confidence-set test: {cmd:twostep} or {cmd:onestep}{p_end}
 {synopt:{cmd:e(predict)}}program used to implement {cmd:predict}{p_end}
 {synopt:{cmd:e(properties)}}{cmd:b V}{p_end}
@@ -918,7 +842,7 @@ fit, and with error 498 if the fit is no longer in memory (for example after
 
 {pstd}
 Further results record the grid, the refinement, the bootstrap draws, the
-seeds, the legacy coefficient bootstrap, and the data signature used by
+seeds, and the data signature used by
 {cmd:predict}; type {cmd:ereturn list} to see them.
 
 
