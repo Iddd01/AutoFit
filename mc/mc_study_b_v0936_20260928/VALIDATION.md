@@ -52,9 +52,13 @@ Smoke results test execution, schema, accounting, seed and merge contracts.
 They are not Monte Carlo performance evidence. Formal results require new runs
 with no smoke overrides.
 
-## Supplement 2 (added 28 September 2026)
+## Supplement 2 (redesigned 28 September 2026)
 
-`supp2_*` files, `run_supp2.ps1` and the exact 0.9.35 release
-(`xtdpthresh_v0935.ado`) were added for SUPP2.md. They have not yet been run;
-a smoke (`-RepCap 1 -B 19 -Grid 10 -GridCI 10`) must pass before the formal
-run. Core and kink-supplement files are unchanged by this addition.
+Supplement 2 now measures the power of the threshold test (SUPP2.md): 48 cells,
+24,000 fits, `citest(.25 + c)` on the Study B core samples. The earlier
+continuity block (0.9.35 vs 0.9.36) and `xtdpthresh_v0935.ado` were removed
+before any run, because the continuity test is outside the article's scope.
+`supp2_link_check.do` verifies against the formal Study B output that every
+replication reproduces the realized panel and gamma-hat of its Study B
+counterpart. A smoke (`-RepCap 1 -B 19 -Grid 10 -GridCI 10`) must pass before
+the formal run. Core and kink-supplement files are unchanged.

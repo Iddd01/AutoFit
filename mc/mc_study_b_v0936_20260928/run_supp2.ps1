@@ -1,4 +1,4 @@
-# Supplement 2 (continuity 0.9.35 vs 0.9.36; threshold-test power); PowerShell 5.1 and Stata 17.
+# Supplement 2 (power of the threshold test at gamma0 + c, FD vs FOD); PowerShell 5.1 and Stata 17.
 [CmdletBinding()]
 param(
  [ValidateSet('Fresh','Resume','Status','Merge')][string]$Action='Status',
@@ -17,7 +17,7 @@ $isStaged=Test-Path -LiteralPath (Join-Path $source 'manifest.json')
 if($isStaged -and $Action -eq 'Fresh'){throw 'Launch a fresh run from the release folder, not a frozen run.'}
 $run=if($isStaged){$source}else{Join-Path $source ('supp2_runs/'+$RunId)}
 $members=@('supp2_worker.do','supp2_merge.do','supp2_cells.csv',
- 'run_supp2.ps1','xtdpthresh.ado','xtdpthresh_v0935.ado','xtdpthresh_p.ado','xtdpthresh.sthlp','SUPP2.md')
+ 'run_supp2.ps1','supp2_link_check.do','xtdpthresh.ado','xtdpthresh_p.ado','xtdpthresh.sthlp','SUPP2.md')
 function Hashes($directory,$names) {
  $map=[ordered]@{}
  foreach($name in $names){$map[$name]=(Get-FileHash -LiteralPath (Join-Path $directory $name) -Algorithm SHA256).Hash}
