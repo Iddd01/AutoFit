@@ -9,8 +9,9 @@ and with 0.9.37, then compares the stored results.
   `e(V)`, `e(V_cond)`, γ̂, the objective, Hansen/AR, sample and instrument counts.
 - **Part B (Study B and supplements):** 0.9.36 vs 0.9.37 with the wild
   bootstrap (B=99, `gridci(20)`, `citest(.25)`); 8 configurations, 3 samples
-  each. Compares `e(b)`, `e(ci_segments)`, the hull, the linearity p-value and
-  `citest()`. The continuity p-value is compared and reported separately.
+  each. Compares `e(b)`, `e(ci_segments)`, the hull, the linearity p-value,
+  `citest()` and the continuity p-value (0.9.37 with `conttest`, which now
+  requests the continuity test).
 
 Run from this folder in Stata 17 (about 15–25 minutes):
 

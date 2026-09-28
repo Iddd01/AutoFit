@@ -3,7 +3,8 @@
 *!   Part A (Study A): 0.9.35 vs 0.9.37, -noboot-, Study A options: e(b), e(V),
 *!     e(V_cond), gamma, objective, Hansen/AR, instrument and sample counts.
 *!   Part B (Study B and supplements): 0.9.36 vs 0.9.37 with the bootstrap:
-*!     threshold set, linearity p-value, citest(), continuity p-value.
+*!     threshold set, linearity p-value, citest(), continuity p-value
+*!     (0.9.37 with conttest, the option that now requests it).
 *! Samples: Gong-Seo benchmark DGP (q predetermined), T=6, N=400; balanced and
 *! MCAR .30 gaps; FD and FOD; jump kappa=1, jump kappa=0, imposed kink; vce
 *! robust and windmeijer. Run from this folder in Stata 17:
@@ -114,6 +115,8 @@ foreach ver in 35 36 37 {
         }
     }
     if inlist(`ver', 36, 37) {
+        * 0.9.37 runs the continuity test only on request (conttest)
+        local copt = cond(`ver' == 37, "conttest", "")
         forvalues j = 1/`kb' {
             forvalues r = 1/`NREP_B' {
                 _gendata 400 `B`j'_p' `B`j'_k' `=5000*`j'+`r''
@@ -121,7 +124,7 @@ foreach ver in 35 36 37 {
                     maxlag(1 3) grid(199) refine(4) gridtype(uniform) ///
                     gridsample(effective) trim(.15) gridci(20) boot(99) ///
                     boottype(wild) rseed(`=777*`j'+`r'') citest(.25) ///
-                    coefboot(none) history(panel) vce(robust) nowarn
+                    coefboot(none) history(panel) vce(robust) nowarn `copt'
                 assert "`e(cmdversion)'" == "0.9.`ver'"
                 matrix Bb`ver'_`j'_`r' = e(b)
                 capture matrix BG`ver'_`j'_`r' = e(ci_segments)
@@ -188,7 +191,8 @@ forvalues j = 1/`kb' {
         }
         _cmp BC36_`j'_`r' BC37_`j'_`r'
         if missing(r(d)) | r(d) > `tol' {
-            di as txt "continuity p-value differs (not used in the article): config `j' rep `r'"
+            di as err "continuity p-value differs: config `j' rep `r'"
+            local fail 1
         }
         else local worstC = max(`worstC', r(d))
     }

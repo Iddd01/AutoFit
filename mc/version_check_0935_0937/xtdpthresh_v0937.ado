@@ -65,6 +65,7 @@ program define xtdpthresh, eclass sortpreserve
         NOWARN                                      ///
         EXPORTGMM                                   ///
         NOTEST                                      ///
+        CONTtest                                    ///
         VCE(string)                                 ///
         COEFCItype(string)                          ///
         COEFBoot(string)                            ///
@@ -365,6 +366,13 @@ program define xtdpthresh, eclass sortpreserve
     // size of the test from the discretization of the confidence set)
     if "`citest'" != "" & !`_will_boot' {
         di as err "citest() requires the grid bootstrap (remove noboot)"
+        exit 198
+    }
+    // v0.9.37: the continuity test is opt-in (conttest). Its statistic is
+    // Gong-Seo's (sec. 3.2, efficient weight); the article evaluates the
+    // threshold set and the linearity test, not this test.
+    if "`conttest'" != "" & (!`_will_boot' | `flag_notest') {
+        di as err "conttest requires the bootstrap tests (remove noboot and notest)"
         exit 198
     }
     if `_will_boot' & `gridci' < 100 & "`nowarn'" == "" {
@@ -724,11 +732,15 @@ program define xtdpthresh, eclass sortpreserve
     // no-op operators such as L0.q to q, so this test is exact.
     local _rhs_expanded "`indepvars' `exog_extra' `endog' `predet'"
     local _q_rhs : list q_var in _rhs_expanded
-    local flag_cont_test = cond(!`flag_kink' & `_q_rhs', 1, 0)
-    if !`flag_kink' & !`_q_rhs' & `_will_boot' & !`flag_notest' & "`nowarn'" == "" {
-        di as text "Note: continuity test omitted because " as res "`q_var'" ///
-            as text " is not a contemporaneous RHS regressor;"
-        di as text "the kink model would not be nested in the estimated jump model."
+    local flag_cont_test = cond(!`flag_kink' & `_q_rhs' & "`conttest'" != "", 1, 0)
+    if "`conttest'" != "" & `flag_kink' {
+        di as err "conttest is not allowed with kink: the fitted model is the kink model"
+        exit 198
+    }
+    if "`conttest'" != "" & !`_q_rhs' {
+        di as err "conttest requires " as res "`q_var'" as err " as a contemporaneous regressor;"
+        di as err "otherwise the kink model is not nested in the estimated jump model."
+        exit 198
     }
 
     // v0.7.13 (audit): duplicates WITHIN one group also survive -syntax-
@@ -1791,10 +1803,11 @@ program define xtdpthresh, eclass sortpreserve
         }
     }
     // v0.9.10 R28: gamma-hat is grid-SELECTED and can be irregular under
-    // the null, so the chi-square reference for J is a conditional
-    // DIAGNOSTIC, not a fully standard specification test -- say so on the
-    // line itself (the last place the output still read like plain GMM).
-    di as text "   Diagnostic Hansen J (conditional on γ̂) = " as res %6.3f `hansen' ///
+    // the null, so the chi-square reference for J is a DIAGNOSTIC, not a
+    // fully standard specification test. v0.9.37: df = L - k - 1 counts
+    // gamma as an estimated parameter (regular identification), so the line
+    // no longer says "conditional on gamma-hat".
+    di as text "   Diagnostic Hansen J = " as res %6.3f `hansen' ///
        as text "  (df=" as res %2.0f `hansen_df' ///
        as text ")  p = " as res %6.4f `hansen_p'
     // v0.9.29: say why J is missing instead of printing a bare ".".
@@ -2159,6 +2172,7 @@ program define xtdpthresh, eclass sortpreserve
         else ereturn local continuity_test "nested comparison; not run"
     }
     else if `flag_kink' ereturn local continuity_test "not run; the fitted model is the kink model"
+    else if "`conttest'" == "" ereturn local continuity_test "not run (conttest not specified)"
     else ereturn local continuity_test "not run; q is not a contemporaneous regressor, so the kink model is not nested"
     if `do_grid_ci' {
         ereturn local threshold_bootstrap_conditioning "valid fixed-B solves only; unresolved points are withdrawn under the validity rule"
@@ -2277,6 +2291,10 @@ program define xtdpthresh, eclass sortpreserve
     ereturn scalar N_trans   = `n_trans'
     ereturn scalar N_iv      = `n_iv'
     ereturn scalar N_units   = `n_units'
+    // v0.9.37: the VCE, Hansen J and the wild bootstrap cluster on the panel
+    // unit; N_clust counts the units with a transformed equation.
+    ereturn scalar N_clust   = `n_units'
+    ereturn local clustvar "`panelvar'"
     ereturn scalar N_switch  = `n_switch'
     ereturn scalar hansen    = `hansen'
     ereturn scalar hansen_df = `hansen_df'
@@ -4717,8 +4735,8 @@ struct xdpt2_gamma_cache rowvector xdpt2_build_gamma_cache_t(
 // cluster wild residual bootstrap (unit-level Mammen weights, fixed W_first,
 // 1-step GMM per draw) — NOT the exact Gong-Seo (2026) Algorithm 1, which
 // resamples (x, z, resid) jointly at the unit level and recenters the
-// bootstrap moments. Gong-Seo validity is proved for the exact algorithm;
-// this scheme is supported by the Monte Carlo evidence in the paper.
+// bootstrap moments. Gong-Seo prove validity for their algorithm; the
+// finite-sample behaviour of this scheme is assessed by simulation.
 // The fixed W_first shared between sample and bootstrap sides keeps the
 // two statistics on the same criterion.
 void xdpt2_fast_gmm_boot(real colvector Y_boot,
@@ -11042,7 +11060,17 @@ end
 *   only belong to the point just evaluated.
 *   (d) The citest() line reads "rejected/not rejected at the 5% level"
 *   (was "reject at 95%").
-*   Estimates, confidence sets and p-values equal 0.9.36.
+*   (e) The continuity test is opt-in: option -conttest-. Without it the
+*   test is not run and e(pval_cont) is missing; with it the statistic,
+*   seed and p-value are those of 0.9.36. conttest is an error with kink,
+*   noboot or notest, or when q is not a contemporaneous regressor (the
+*   note printed for that case is gone).
+*   (f) The Hansen J line no longer says "conditional on gamma-hat": its
+*   df = L - k - 1 counts gamma as an estimated parameter.
+*   (g) e(clustvar) (panel variable) and e(N_clust) (= e(N_units)) are
+*   posted: the VCE, Hansen J and the wild bootstrap cluster on the unit.
+*   Estimates, confidence sets, citest() and the linearity p-value equal
+*   0.9.36 (each bootstrap component has its own seed).
 * ---------------------------------------------------------------------------
 * v0.9.36 (28sep2026): continuity-test power; threshold-test diagnostic.
 *   (a) Continuity-test power. The bootstrap DGP used the restricted (kink)
