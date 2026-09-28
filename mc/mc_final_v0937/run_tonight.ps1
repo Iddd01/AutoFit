@@ -19,7 +19,9 @@ function Wait-Stata {
  # all shards of a step must finish; two empty polls a minute apart
  Start-Sleep -Seconds 90
  $empty=0
+ $deadline=(Get-Date).AddHours(14)
  while($empty -lt 2){
+  if((Get-Date) -gt $deadline){throw 'Stata still running after 14 hours'}
   $n=@(Get-Process StataMP-64 -ErrorAction SilentlyContinue).Count
   if($n -eq 0){$empty++}else{$empty=0}
   Start-Sleep -Seconds 60
@@ -29,7 +31,13 @@ function Step($name,[scriptblock]$body){
  Note "START $name"
  # launcher output goes to the console, so Step returns only the boolean
  try {& $body | Out-Host; Note "OK    $name"; return $true}
- catch {Note "FAIL  $name : $($_.Exception.Message)"; return $false}
+ catch {
+  Note "FAIL  $name : $($_.Exception.Message)"
+  # a launch that failed part way can leave shards running: let them finish
+  # before the next block starts (the incomplete run can be resumed later)
+  try {Wait-Stata} catch {Note "      $($_.Exception.Message)"}
+  return $false
+ }
 }
 if(@(Get-Process StataMP-64 -ErrorAction SilentlyContinue).Count -gt 0){throw 'Close every Stata before starting.'}
 Note "run_tonight: root=$root NShard=$NShard"
@@ -37,10 +45,13 @@ Note "run_tonight: root=$root NShard=$NShard"
 # 0. version check: 0.9.35/0.9.36 vs 0.9.37 on common samples
 $null=Step 'version_check' {
  $dir=Join-Path $root 'version_check'
- $p=Start-Process -FilePath $Stata -ArgumentList '/e do version_check.do' -WorkingDirectory $dir -WindowStyle Hidden -PassThru -Wait
  $vlog=Join-Path $dir 'version_check.log'
- if(-not (Select-String -LiteralPath $vlog -Pattern 'VERSION_CHECK_PASS' -SimpleMatch -Quiet)){throw 'VERSION_CHECK_PASS not found in version_check.log'}
- (Select-String -LiteralPath $vlog -Pattern 'max reldif' -SimpleMatch) | ForEach-Object {Note ('      '+$_.Line.Trim())}
+ Remove-Item -LiteralPath $vlog -ErrorAction SilentlyContinue
+ $p=Start-Process -FilePath $Stata -ArgumentList '/e do version_check.do' -WorkingDirectory $dir -WindowStyle Hidden -PassThru -Wait
+ # the batch log echoes the do-file, so match result lines only
+ if(Select-String -LiteralPath $vlog -Pattern '^VERSION_CHECK_FAIL|^r\(\d+\);' -Quiet){throw 'version check failed; see version_check.log'}
+ if(-not (Select-String -LiteralPath $vlog -Pattern '^VERSION_CHECK_PASS\s*$' -Quiet)){throw 'VERSION_CHECK_PASS not found in version_check.log'}
+ (Select-String -LiteralPath $vlog -Pattern '^(Part [AB]|continuity).*max reldif') | ForEach-Object {Note ('      '+$_.Line.Trim())}
 }
 
 # 1. Study A core (point estimation, 116 cells)
