@@ -25,8 +25,11 @@ if !_rc {
     file open `READ' using "`OUT'", read text
     file read `READ' first
     file close `READ'
-    assert `"`first'"' == `"`HEADER'"'
-    import delimited using "`OUT'", clear case(preserve) stringcols(_all)
+    if `"`first'"' != `"`HEADER'"' {
+        di as err "supp2_worker: `OUT' has a different header; use a new RunId"
+        exit 459
+    }
+    import delimited using "`OUT'", clear case(preserve) varnames(1) stringcols(_all)
     if _N {
         destring cell_id rep shard, replace
         isid cell_id rep

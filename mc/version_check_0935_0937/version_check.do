@@ -155,8 +155,11 @@ program define _cmp, rclass
             local a = `A'[`i',`k']
             local b = `B'[`i',`k']
             if missing(`a') & missing(`b') continue
-            if missing(`a') | missing(`b') local d = .
-            else local d = max(`d', reldif(`a', `b'))
+            if missing(`a') | missing(`b') {
+                return scalar d = .
+                exit
+            }
+            local d = max(`d', reldif(`a', `b'))
         }
     }
     return scalar d = `d'

@@ -26,7 +26,7 @@ save `registry'
 local first=1
 local nshards=${supp_nshard}
 forvalues sh=1/`nshards' {
-    import delimited using "supp2_SH`sh'.csv", clear case(preserve) stringcols(_all)
+    import delimited using "supp2_SH`sh'.csv", clear case(preserve) varnames(1) stringcols(_all)
     local expected run_id block cell_id pair_id link_cell method N T miss missp kappa c citest_value R B grid gridci refine trim maxlag_lo maxlag_hi gridtype gridsample master shard rep dgp_seed missing_seed boot_seed units_realized analysis_observed rc version_ok twostep gamma_hat N_used citest_gamma citest_accept citest_p citest_D citest_crit citest_status citest_draws seed_citest elapsed_s
     unab actual: _all
     assert "`actual'"=="`expected'"
@@ -121,8 +121,11 @@ preserve
     gen byte both=!missing(cit_rejfd) & !missing(cit_rejfod)
     gen byte only_fd=(cit_rejfd==1 & cit_rejfod==0) if both
     gen byte only_fod=(cit_rejfd==0 & cit_rejfod==1) if both
+    * rates on the pairs where both tests are evaluable, as McNemar
+    gen byte rfd=cit_rejfd if both
+    gen byte rfod=cit_rejfod if both
     collapse (sum) n_both=both n_only_fd=only_fd n_only_fod=only_fod ///
-        (mean) reject_fd=cit_rejfd reject_fod=cit_rejfod, by(block miss N kappa c)
+        (mean) reject_fd=rfd reject_fod=rfod, by(block miss N kappa c)
     gen double diff_fod_fd=reject_fod-reject_fd
     * exact McNemar test on the discordant pairs
     gen double n_disc=n_only_fd+n_only_fod
