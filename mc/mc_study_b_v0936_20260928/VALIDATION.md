@@ -71,3 +71,11 @@ shards were live (`Status` error; running shards unaffected; `Merge` after all
 shards finish never reaches the parse). It now parses with the invariant
 culture and round-trip kind. Runs launched with the earlier launcher keep it
 (frozen by hash); check their progress through the `*_done_SH*.txt` markers.
+
+## Supplement 2, registry 2 (28 September 2026)
+
+`supp2b_cells.csv` (12 FD cells in the Gong–Seo geometry of B6) and the
+`-Registry` option of `run_supp2.ps1` were added after the formal run of the
+48-cell registry (merge and link check passed). `supp2_merge.do` now groups the
+paired-seed check by block and writes a one-line `supp2_paired.csv` for a
+single-method registry. Earlier runs keep their frozen copies.

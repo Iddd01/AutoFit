@@ -24,6 +24,19 @@ q predetermined, grid(199) refine(4) trim(.15) maxlag(1 3), uniform grid,
 effective support, B=499, `notest gridci(10)` (`citest()` does not depend on
 the CI grid).
 
+## Registry 2: Gong–Seo instrument geometry (`supp2b_cells.csv`, 12 cells, 6,000 fits)
+
+Added after the formal run of the 48 cells, whose power at kappa = 1 and
+c >= .25 was about half of Gong–Seo (2026, Table 2). These cells repeat the
+test in the B6 geometry of Study B, which is close to Gong–Seo's design (all
+available lags: `maxlag(1 5)`, 46-point p5–p95 quantile grid, trim .10,
+observed support, refine 0, B = 500), FD only, balanced, N in {400, 800},
+kappa 0 and 1, c .10, .25, .50. The samples are those of the Study B cells
+`b6_cal_bal_n*_k*_fd`, so the c = 0 column is the B6 `citest` coverage. Power
+close to Gong–Seo here would place the gap in the instrument set of the main
+geometry rather than in the bootstrap. Launch with `-Registry supp2b_cells.csv`
+under its own RunId; the merged `supp2_paired.csv` is a one-line note (FD only).
+
 ## Same samples as Study B
 
 The DGP code, the DGP seed and the missingness seed are those of
@@ -55,7 +68,16 @@ paired.
 .\run_supp2.ps1 -Action Merge -RunId supp2_formal
 ```
 
-Then, inside `supp2_runs\supp2_formal`, in Stata:
+Registry 2 (Gong–Seo geometry):
+
+```powershell
+.\run_supp2.ps1 -Action Fresh -RunId supp2b_smoke -Registry supp2b_cells.csv -NShard 4 -RepCap 1 -B 19 -Grid 10 -GridCI 10
+.\run_supp2.ps1 -Action Merge -RunId supp2b_smoke
+.\run_supp2.ps1 -Action Fresh -RunId supp2b_formal -Registry supp2b_cells.csv -NShard 28
+.\run_supp2.ps1 -Action Merge -RunId supp2b_formal
+```
+
+Then, inside the run folder (`supp2_runs\supp2_formal` or `supp2_runs\supp2b_formal`), in Stata:
 
 ```stata
 do supp2_link_check.do "<formal Study B folder>\_merge_stage_<nonce>\study_b_all.dta"

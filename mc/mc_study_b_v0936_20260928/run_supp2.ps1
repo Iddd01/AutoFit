@@ -1,4 +1,6 @@
-# Supplement 2 (power of the threshold test at gamma0 + c, FD vs FOD); PowerShell 5.1 and Stata 17.
+# Supplement 2 (power of the threshold test at gamma0 + c); PowerShell 5.1 and Stata 17.
+# -Registry picks the cell file (supp2_cells.csv: FD vs FOD; supp2b_cells.csv: Gong-Seo geometry);
+# it is frozen in the run folder as supp2_cells.csv.
 [CmdletBinding()]
 param(
  [ValidateSet('Fresh','Resume','Status','Merge')][string]$Action='Status',
@@ -8,6 +10,7 @@ param(
  [ValidateRange(0,10000)][int]$B=0,
  [ValidateRange(0,10000)][int]$Grid=0,
  [ValidateRange(0,10000)][int]$GridCI=0,
+ [ValidateSet('supp2_cells.csv','supp2b_cells.csv')][string]$Registry='supp2_cells.csv',
  [string]$Stata='C:\Program Files\Stata17\StataMP-64.exe'
 )
 $ErrorActionPreference='Stop'
@@ -46,16 +49,19 @@ function Live-Jobs {
 if($Action -eq 'Fresh') {
  if(Test-Path -LiteralPath $run){throw 'Run already exists; use a new RunId or Resume.'}
  if(($B -gt 0 -and $B -lt 10)-or($Grid -gt 0 -and $Grid -lt 10)-or($GridCI -gt 0 -and $GridCI -lt 10)){throw 'Positive B/Grid/GridCI overrides must be at least 10.'}
- $cells=@(Import-Csv -LiteralPath (Join-Path $source 'supp2_cells.csv'))
+ $cells=@(Import-Csv -LiteralPath (Join-Path $source $Registry))
  $expected=0
  foreach($c in $cells){$expected+=if($RepCap){[Math]::Min($RepCap,[int]$c.R)}else{[int]$c.R}}
  if($NShard -gt $expected){throw 'NShard exceeds number of requested fits.'}
  New-Item -ItemType Directory -Path (Split-Path -Parent $run) -Force | Out-Null
  New-Item -ItemType Directory -Path $run | Out-Null
- foreach($f in $members){Copy-Item -LiteralPath (Join-Path $source $f) -Destination (Join-Path $run $f)}
+ foreach($f in $members){
+  $from=if($f -eq 'supp2_cells.csv'){$Registry}else{$f}
+  Copy-Item -LiteralPath (Join-Path $source $from) -Destination (Join-Path $run $f)
+ }
  $config=@{
   RunId=$RunId;NShard=$NShard;RepCap=$RepCap;B=$B;Grid=$Grid;GridCI=$GridCI;
-  Master=20260814;Expected=$expected;Cells=$cells.Count;Study='SUPP2';
+  Master=20260814;Expected=$expected;Cells=$cells.Count;Study='SUPP2';Registry=$Registry;
   Formal=($RepCap -eq 0 -and $B -eq 0 -and $Grid -eq 0 -and $GridCI -eq 0)
  }
  $configDo=@"

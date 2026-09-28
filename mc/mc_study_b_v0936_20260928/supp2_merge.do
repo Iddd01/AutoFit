@@ -80,7 +80,7 @@ assert citest_D==0 & citest_accept==1 & citest_p==1 & missing(citest_crit) & ///
     missing(citest_draws) if rc==0 & citest_status==2
 * paired samples: FD/FOD and every kappa/c cell of a panel type and N share
 * the outer sample; the realized panel must therefore coincide
-bysort miss N rep (cell_id): assert dgp_seed==dgp_seed[1] & ///
+bysort block miss N rep (cell_id): assert dgp_seed==dgp_seed[1] & ///
     missing_seed==missing_seed[1] & boot_seed==boot_seed[1] & ///
     units_realized==units_realized[1] & analysis_observed==analysis_observed[1]
 gen byte formal=${supp_formal}
@@ -113,8 +113,11 @@ preserve
     export delimited using supp2_summary.csv, replace
 restore
 
-* ---- FD vs FOD on the same samples and draws ----
+* ---- FD vs FOD on the same samples and draws (registries with both) ----
+quietly levelsof method
+local nmeth : word count `r(levels)'
 preserve
+if `nmeth' == 2 {
     gen byte cit_rej=(citest_accept==0) if inlist(citest_status,1,2) & rc==0
     keep block miss N kappa c rep method cit_rej
     reshape wide cit_rej, i(block miss N kappa c rep) j(method) string
@@ -131,7 +134,13 @@ preserve
     gen double n_disc=n_only_fd+n_only_fod
     gen double mcnemar_p=min(1,2*binomial(n_disc,min(n_only_fd,n_only_fod),.5)) if n_disc>0
     sort block miss kappa c
-    export delimited using supp2_paired.csv, replace
+}
+else {
+    clear
+    set obs 1
+    gen str40 note = "single-method registry: no FD-FOD pairs"
+}
+export delimited using supp2_paired.csv, replace
 restore
 tempname DONE
 file open `DONE' using supp2_merge.ok, write replace text
