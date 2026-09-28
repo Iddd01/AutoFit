@@ -564,7 +564,8 @@ if !`newfile' {
                 (!missing(gamma0) & hull_covered != (gamma_lo <= gamma0 & gamma0 <= gamma_hi)) | ///
                 (missing(gamma0) & !missing(hull_covered)) | ///
                 (covered == 1 & hull_covered != 1))) | ///
-             (ci_delivered != 1 & !missing(gamma_lo,gamma_hi,hull_covered,hull_length)))
+             (ci_delivered != 1 & (!missing(gamma_lo) | !missing(gamma_hi) | ///
+                !missing(hull_covered) | !missing(hull_length))))
         if r(N) {
             di as err "study_b_worker: completed row has inconsistent hull columns"
             exit 459
@@ -1112,7 +1113,7 @@ forvalues rep = `REP_START'/`REP_END' {
             else if `citest_status' == 2 {
                 capture assert `citest_evaluable' == 1 & `citest_D' == 0 & ///
                     `citest_accept' == 1 & `citest_p' == 1 & ///
-                    missing(`citest_crit',`citest_draws')
+                    missing(`citest_crit') & missing(`citest_draws')
                 if _rc {
                     di as err "study_b_worker: mechanical citest() result is inconsistent"
                     exit 459
@@ -1125,8 +1126,10 @@ forvalues rep = `REP_START'/`REP_END' {
         }
         else {
             capture assert `citest_returned' == 0 & `citest_evaluable' == 0 & ///
-                missing(`citest_gamma',`citest_accept',`citest_p',`citest_D', ///
-                    `citest_crit',`citest_status',`citest_draws',`seed_citest')
+                missing(`citest_gamma') & missing(`citest_accept') & ///
+                missing(`citest_p') & missing(`citest_D') & ///
+                missing(`citest_crit') & missing(`citest_status') & ///
+                missing(`citest_draws') & missing(`seed_citest')
             if _rc {
                 di as err "study_b_worker: unrequested citest() returned state"
                 exit 459

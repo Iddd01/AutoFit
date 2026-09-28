@@ -35,6 +35,18 @@ reported-interval columns (`gamma_lo`, `gamma_hi`, `hull_covered`,
 `hull_length`; supplement `ci_*` equivalents) and their summaries, and the
 supplement no longer passes `citest()` when `B=0`. The estimator is unchanged.
 Both smokes must be rerun on this package before any formal run.
+Both smokes were rerun and passed (`smoke_b0936`: 52/52 rows, verified
+merge; `supp_smoke_0936c`: 8/8 rows, verified merge).
+
+## Post-formal-launch hardening (for later runs)
+
+A code review found that several "all fields empty" checks used Stata's
+`missing(a,b,...)`, which is true when ANY argument is missing, so they
+accepted rows with some fields filled. They now test each field
+(`missing(a) & missing(b) ...`, or `!missing(a) | !missing(b) ...` for the
+flag form). Data written by the worker are unaffected; only the strength of
+the validation changes. The staged copies inside an already launched run are
+not modified.
 
 Smoke results test execution, schema, accounting, seed and merge contracts.
 They are not Monte Carlo performance evidence. Formal results require new runs

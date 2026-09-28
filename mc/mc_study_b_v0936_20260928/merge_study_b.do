@@ -518,8 +518,9 @@ if r(N) {
 }
 quietly count if citest_requested == 0 & ///
     (citest_returned!=0 | citest_evaluable!=0 | ///
-     !missing(citest_gamma,citest_accept,citest_p,citest_D,citest_crit, ///
-              citest_status,citest_draws,seed_citest))
+     !missing(citest_gamma) | !missing(citest_accept) | !missing(citest_p) | ///
+     !missing(citest_D) | !missing(citest_crit) | !missing(citest_status) | ///
+     !missing(citest_draws) | !missing(seed_citest))
 if r(N) {
     di as err "merge_study_b: unrequested citest returned state"
     exit 459

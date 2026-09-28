@@ -1,4 +1,4 @@
-*! version 0.9.36  28sep2026
+*! version 0.9.37  28sep2026
 *! xtdpthresh -- dynamic panel threshold regression (Seo-Shin 2016; Gong-Seo 2026)
 *! Duy Chinh Nguyen (IU VNU-HCM) & Nhat Duy Lai (SGU, corresponding). See -help xtdpthresh-.
 
@@ -1781,8 +1781,8 @@ program define xtdpthresh, eclass sortpreserve
             di as text "   Threshold test (H0: γ = " as res %9.0g `citest_m'[1, 1] ///
                as text ")  D = " as res %7.3f `citest_m'[1, 2] ///
                as text "  p = " as res %6.4f `citest_m'[1, 7] ///
-               as text "  " cond(`citest_m'[1, 4] == 1, "accept", "reject") ///
-               as text " at " as res "`level'%"
+               as text "  " cond(`citest_m'[1, 4] == 1, "not rejected", "rejected") ///
+               as text " at the " as res "`=100-`level''%" as text " level"
         }
         else {
             di as text "   Threshold test (H0: γ = " as res %9.0g `citest_m'[1, 1] ///
@@ -2027,7 +2027,7 @@ program define xtdpthresh, eclass sortpreserve
     ereturn scalar N_stack   = `=`nused''
     ereturn local predict    "xtdpthresh_p"
     ereturn local cmdline    `"xtdpthresh `cmdline'"'
-    ereturn local cmdversion "0.9.36"
+    ereturn local cmdversion "0.9.37"
     ereturn local searchmode "`searchmode'"
     ereturn scalar searchtol = `searchtol'
     ereturn scalar searchmax = `searchmax_effective'
@@ -7072,6 +7072,7 @@ void xdpt2_grid_bootstrap(struct xdpt2_unit rowvector units,
         // slower (e.g., γ = 0 when q >= 0 is also a regressor, where
         // q*1(q > γ) equals q).
         D_vec = J(n_boot, 1, .)
+        if (args() == 32) D_out = J(0, 1, .)
         real scalar n_rows_r_b, use_batch_b
         real colvector fast_gb_b
         real matrix ETA_b, OBJ_b
@@ -7599,58 +7600,66 @@ real scalar xdpt2_continuity_test(struct xdpt2_unit rowvector units,
     // where the kink design succeeds. Selecting the restricted minimum from
     // those kink-only points and then clamping a negative distance to zero
     // silently turned a nonnested numerical comparison into a p-value.
+    // v0.9.37: if the fixed-W2 solve leaves fewer than two jointly feasible
+    // points (or no kink fit), the comparison is redone under W1, as up to
+    // 0.9.35, instead of withholding the test.
     real colvector common_C
-    common_C = J(0, 1, 0)
-    for (gl = 1; gl <= min((cols(cache_kink), cols(cache_jump))); gl++) {
-        if (!cache_kink[gl].ok |
-            (w2c ? cache_kink[gl].fast2_ok : cache_kink[gl].fast_ok) != 1) continue
-        if (!cache_jump[gl].ok |
-            (w2c ? cache_jump[gl].fast2_ok : cache_jump[gl].fast_ok) != 1) continue
-        if (cache_kink[gl].n_rows != cache_jump[gl].n_rows) continue
-        if (any(cache_kink[gl].uid :!= cache_jump[gl].uid)) continue
-        if (any(cache_kink[gl].times :!= cache_jump[gl].times)) continue
-        if (any(cache_kink[gl].dY :!= cache_jump[gl].dY)) continue
-        common_C = common_C \ gl
-    }
-    // Select the restricted DGP with the SAME one-step objective used by both
-    // the sample statistic and bootstrap draws. fast_ok certifies the normal
-    // matrix only; require the kink and its matching jump solve to be finite
-    // on the observed sample before calling a gamma jointly feasible.
-    real scalar idx_k
+    real scalar idx_k, pass_C, n_pass_C
     real colvector common_eval_C
-    idx_k = 0
-    best_k_1s = .
-    common_eval_C = J(0, 1, 0)
-    for (ci_C = 1; ci_C <= rows(common_C); ci_C++) {
-        gl_1s = common_C[ci_C]
-        xdpt2_fast_gmm_boot_w(cache_kink[gl_1s].dY, cache_kink[gl_1s],
-                               w2c, bA, ok_1s, theta_kcand, obj_kcand)
-        if (!ok_1s) continue
-        xdpt2_fast_gmm_boot_w(cache_kink[gl_1s].dY, cache_jump[gl_1s],
-                               w2c, bA, ok_jmatch, theta_1s_dummy, obj_jmatch)
-        if (!ok_jmatch) continue
-        common_eval_C = common_eval_C \ gl_1s
-        // v0.9.14 R33 (#5): deterministic tie-break -- the selected kink
-        // model SEEDS the whole continuity bootstrap DGP, so near-flat
-        // profiles must not resolve by grid insertion order.
-        if (best_k_1s == .) {
-            best_k_1s = obj_kcand
-            idx_k = gl_1s
-            theta_kink_sample = theta_kcand
+    n_pass_C = 1 + w2c
+    for (pass_C = 1; pass_C <= n_pass_C; pass_C++) {
+        if (pass_C == 2) w2c = 0
+        common_C = J(0, 1, 0)
+        for (gl = 1; gl <= min((cols(cache_kink), cols(cache_jump))); gl++) {
+            if (!cache_kink[gl].ok |
+                (w2c ? cache_kink[gl].fast2_ok : cache_kink[gl].fast_ok) != 1) continue
+            if (!cache_jump[gl].ok |
+                (w2c ? cache_jump[gl].fast2_ok : cache_jump[gl].fast_ok) != 1) continue
+            if (cache_kink[gl].n_rows != cache_jump[gl].n_rows) continue
+            if (any(cache_kink[gl].uid :!= cache_jump[gl].uid)) continue
+            if (any(cache_kink[gl].times :!= cache_jump[gl].times)) continue
+            if (any(cache_kink[gl].dY :!= cache_jump[gl].dY)) continue
+            common_C = common_C \ gl
         }
-        else {
-            real scalar tol_k
-            tol_k = xdpt2_objtol(obj_kcand, best_k_1s, 1e-12)
-            if (obj_kcand < best_k_1s - tol_k |
-                (abs(obj_kcand - best_k_1s) <= tol_k &
-                 gamma_grid[gl_1s] < gamma_grid[idx_k])) {
+        // Select the restricted DGP with the SAME one-step objective used by both
+        // the sample statistic and bootstrap draws. fast_ok certifies the normal
+        // matrix only; require the kink and its matching jump solve to be finite
+        // on the observed sample before calling a gamma jointly feasible.
+        idx_k = 0
+        best_k_1s = .
+        common_eval_C = J(0, 1, 0)
+        for (ci_C = 1; ci_C <= rows(common_C); ci_C++) {
+            gl_1s = common_C[ci_C]
+            xdpt2_fast_gmm_boot_w(cache_kink[gl_1s].dY, cache_kink[gl_1s],
+                                   w2c, bA, ok_1s, theta_kcand, obj_kcand)
+            if (!ok_1s) continue
+            xdpt2_fast_gmm_boot_w(cache_kink[gl_1s].dY, cache_jump[gl_1s],
+                                   w2c, bA, ok_jmatch, theta_1s_dummy, obj_jmatch)
+            if (!ok_jmatch) continue
+            common_eval_C = common_eval_C \ gl_1s
+            // v0.9.14 R33 (#5): deterministic tie-break -- the selected kink
+            // model SEEDS the whole continuity bootstrap DGP, so near-flat
+            // profiles must not resolve by grid insertion order.
+            if (best_k_1s == .) {
                 best_k_1s = obj_kcand
                 idx_k = gl_1s
                 theta_kink_sample = theta_kcand
             }
+            else {
+                real scalar tol_k
+                tol_k = xdpt2_objtol(obj_kcand, best_k_1s, 1e-12)
+                if (obj_kcand < best_k_1s - tol_k |
+                    (abs(obj_kcand - best_k_1s) <= tol_k &
+                     gamma_grid[gl_1s] < gamma_grid[idx_k])) {
+                    best_k_1s = obj_kcand
+                    idx_k = gl_1s
+                    theta_kink_sample = theta_kcand
+                }
+            }
         }
+        common_C = common_eval_C
+        if (rows(common_C) >= 2 & idx_k > 0) break
     }
-    common_C = common_eval_C
     common_out = rows(common_C)
     if (common_out < 2 | idx_k == 0) return(.)
     dY_k    = cache_kink[idx_k].dY
@@ -7665,13 +7674,26 @@ real scalar xdpt2_continuity_test(struct xdpt2_unit rowvector units,
     count_exceed = 0
     valid_boot = 0
 
+    // v0.9.37: jump entries that may enter the comparison are those on the
+    // kink rows (same uid, times and dY), not merely the same row count; the
+    // jump residuals of the bootstrap DGP come from one of them.
+    real colvector jalign
+    jalign = J(n1_t, 1, 0)
+    for (gl_1s = 1; gl_1s <= n1_t; gl_1s++) {
+        if (!cache_jump[gl_1s].ok) continue
+        if (cache_jump[gl_1s].n_rows != rows(dY_k)) continue
+        if (any(cache_jump[gl_1s].uid :!= uid_k)) continue
+        if (any(cache_jump[gl_1s].times :!= times_k)) continue
+        if (any(cache_jump[gl_1s].dY :!= dY_k)) continue
+        jalign[gl_1s] = 1
+    }
+
     best_j_1s = .
     real scalar idx_j
     real colvector theta_jump_sample
     idx_j = 0
     for (gl_1s = 1; gl_1s <= n1_t; gl_1s++) {
-        if (!cache_jump[gl_1s].ok) continue
-        if (cache_jump[gl_1s].n_rows != rows(dY_k)) continue
+        if (!jalign[gl_1s]) continue
         xdpt2_fast_gmm_boot_w(dY_k, cache_jump[gl_1s], w2c, bA,
                                ok_1s, theta_1s_dummy, obj_cur)
         if (!ok_1s) continue
@@ -7690,7 +7712,7 @@ real scalar xdpt2_continuity_test(struct xdpt2_unit rowvector units,
     // delta*(1(q>gamma0) - kink fit), which inflated every bootstrap
     // statistic and with it the critical value -- the continuity test lost
     // power exactly where it should reject. dY and the row sample are the
-    // same for both models (common rows checked above).
+    // same for both models (rows aligned by jalign above).
     r_kink = dY_k - cache_jump[idx_j].dW * theta_jump_sample
     if (hasmissing(r_kink)) return(.)
     T_sample = best_k_1s - best_j_1s
@@ -7726,8 +7748,7 @@ real scalar xdpt2_continuity_test(struct xdpt2_unit rowvector units,
     fast_j_C = J(0, 1, 0)
     if (use_batch_C) {
         for (gl_j = 1; gl_j <= n1_t; gl_j++) {
-            if (!cache_jump[gl_j].ok) continue
-            if (cache_jump[gl_j].n_rows != n_rows_k) continue
+            if (!jalign[gl_j]) continue
             if ((w2c ? cache_jump[gl_j].fast2_ok : cache_jump[gl_j].fast_ok) != 1) continue
             fast_j_C = fast_j_C \ gl_j
         }
@@ -7813,8 +7834,7 @@ real scalar xdpt2_continuity_test(struct xdpt2_unit rowvector units,
 
             min_obj_jump_b = .
             for (gl_j = 1; gl_j <= n1_t; gl_j++) {
-                if (!cache_jump[gl_j].ok) continue
-                if (cache_jump[gl_j].n_rows != rows(Y_boot)) continue
+                if (!jalign[gl_j]) continue
                 xdpt2_fast_gmm_boot_w(Y_boot, cache_jump[gl_j], w2c, bA,
                                        ok_b, theta_cur, obj_cur)
                 if (!ok_b) continue
@@ -11009,6 +11029,22 @@ end
 *   settings at N = 1600: 7.8 to 2.6 seconds per fit.
 * ---------------------------------------------------------------------------
 
+* ---------------------------------------------------------------------------
+* v0.9.37 (28sep2026): continuity-test hardening (code review of 0.9.36).
+*   (a) The jump entries of the continuity comparison (its minimum, the
+*   batched and scalar bootstrap alternatives, and the source of the jump
+*   residuals) must lie on the kink rows -- same uid, times and dY -- not
+*   merely have the same row count. The rows do not depend on gamma by
+*   construction, so results are unchanged; the guard makes it explicit.
+*   (b) If the fixed-W2 solve leaves fewer than two jointly feasible points,
+*   the comparison is redone under the first-step weight, as up to 0.9.35,
+*   instead of withholding the test.
+*   (c) The draws returned for citest() are reset at each point, so they can
+*   only belong to the point just evaluated.
+*   (d) The citest() line reads "rejected/not rejected at the 5% level"
+*   (was "reject at 95%").
+*   Estimates, confidence sets and p-values equal 0.9.36 whenever (b) does
+*   not apply.
 * ---------------------------------------------------------------------------
 * v0.9.36 (28sep2026): continuity-test power; threshold-test diagnostic.
 *   (a) Continuity-test power. The bootstrap DGP used the restricted (kink)

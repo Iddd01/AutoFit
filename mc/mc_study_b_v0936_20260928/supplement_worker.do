@@ -130,7 +130,7 @@ forvalues j=1/`ncells' {
                 capture local `nm'=e(`nm')
             }
             if `B'==0 {
-                assert missing(`citest_gamma',`citest_status',`seed_citest')
+                assert missing(`citest_gamma') & missing(`citest_status') & missing(`seed_citest')
             }
             else {
             assert abs(`citest_gamma'-.25)<=1e-12 & ///
@@ -145,7 +145,7 @@ forvalues j=1/`ncells' {
             }
             else if `B'>0 & `citest_status'==2 {
                 assert `citest_D'==0 & `citest_accept'==1 & `citest_p'==1 & ///
-                    missing(`citest_crit',`citest_draws')
+                    missing(`citest_crit') & missing(`citest_draws')
             }
             capture matrix VC=e(V_cond)
             local hasvc=(_rc==0)

@@ -59,7 +59,7 @@ assert dgp_seed==1+hh
 assert missing_seed==700000001+mod(hh*1009+mc*10007+7919,699999999)
 assert boot_seed==1400000001+mod(hh*1013+mc*10007+B*131+grid*137+gridci*139+271828,699999999)
 assert seed_citest==mod(boot_seed+477377,2147483648) if rc==0 & B>0
-assert missing(seed_citest,citest_status) if B==0
+assert missing(seed_citest) & missing(citest_status) if B==0
 drop hh mc offset
 assert inlist(success,0,1) & inlist(ci_delivered,0,1)
 assert success==0 if rc!=0
@@ -76,14 +76,15 @@ assert !missing(ci_gamma_lo,ci_gamma_hi,ci_hull_covered,ci_hull_length) & ///
     ci_gamma_lo<=ci_gamma_hi & abs(ci_hull_length-(ci_gamma_hi-ci_gamma_lo))<=1e-12 & ///
     ci_hull_covered==(ci_gamma_lo<=.25 & .25<=ci_gamma_hi) & ///
     ci_hull_length>=ci_length-1e-12 & (ci_covered!=1 | ci_hull_covered==1) if ci_delivered
-assert missing(ci_gamma_lo,ci_gamma_hi,ci_hull_covered,ci_hull_length) if !ci_delivered
+assert missing(ci_gamma_lo) & missing(ci_gamma_hi) & missing(ci_hull_covered) & ///
+    missing(ci_hull_length) if !ci_delivered
 assert abs(citest_gamma-.25)<=1e-12 & inrange(citest_status,1,6) if rc==0 & B>0
 assert citest_draws==B & !missing(citest_crit,citest_accept,citest_p,citest_D) & ///
     inlist(citest_accept,0,1) & inrange(citest_p,0,1) & ///
     citest_accept==(citest_D<=citest_crit) & citest_accept==(citest_p>.05) ///
     if rc==0 & citest_status==1
 assert citest_D==0 & citest_accept==1 & citest_p==1 & ///
-    missing(citest_crit,citest_draws) if rc==0 & citest_status==2
+    missing(citest_crit) & missing(citest_draws) if rc==0 & citest_status==2
 bysort pair_id rep: assert dgp_seed==dgp_seed[1] & missing_seed==missing_seed[1] & boot_seed==boot_seed[1]
 gen byte formal=${supp_formal}
 sort cell_id rep
