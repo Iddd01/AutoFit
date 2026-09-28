@@ -1,4 +1,4 @@
-*! version 0.9.35  27sep2026
+*! version 0.9.36  28sep2026
 *! xtdpthresh -- dynamic panel threshold regression (Seo-Shin 2016; Gong-Seo 2026)
 *! Duy Chinh Nguyen (IU VNU-HCM) & Nhat Duy Lai (SGU, corresponding). See -help xtdpthresh-.
 
@@ -49,6 +49,7 @@ program define xtdpthresh, eclass sortpreserve
         SEARCHMAX(integer -1)                       ///
         SEARCHTol(real 1e-8)                        ///
         GRIDCI(integer 100)                         ///
+        CIREFine(integer 3)                         ///
         GRIDType(string)                            ///
         MINREGime(integer 0)                        ///
         GRIDSample(string)                          ///
@@ -357,6 +358,12 @@ program define xtdpthresh, eclass sortpreserve
     }
     if `_will_boot' & (missing(`gridci') | `gridci' < 10) {
         di as err "gridci() must be at least 10"
+        exit 198
+    }
+    // v0.9.36: cirefine(#) rounds of boundary refinement of the inverted
+    // threshold set (0 = the gridci() points only, as up to 0.9.35)
+    if missing(`cirefine') | `cirefine' < 0 | `cirefine' > 10 {
+        di as err "option cirefine() must be an integer between 0 and 10"
         exit 198
     }
     if `_will_boot' & `gridci' < 100 & "`nowarn'" == "" {
@@ -1468,6 +1475,7 @@ program define xtdpthresh, eclass sortpreserve
     cap matrix `ci_tab_m' = r(xdpt2_ci_grid)
     cap matrix `ci_seg_m' = r(xdpt2_ci_segments)
     local ci_unres = r(xdpt2_ci_unres)
+    local ci_ref_add = r(xdpt2_ci_ref_add)
     // v0.8.2 R11 (#7): grid/floor reproducibility metadata
     local minreg_def = r(xdpt2_minreg_def)
     local minreg_app = r(xdpt2_minreg_app)
@@ -1996,7 +2004,7 @@ program define xtdpthresh, eclass sortpreserve
     ereturn scalar N_stack   = `=`nused''
     ereturn local predict    "xtdpthresh_p"
     ereturn local cmdline    `"xtdpthresh `cmdline'"'
-    ereturn local cmdversion "0.9.35"
+    ereturn local cmdversion "0.9.36"
     ereturn local searchmode "`searchmode'"
     ereturn scalar searchtol = `searchtol'
     ereturn scalar searchmax = `searchmax_effective'
@@ -2358,6 +2366,9 @@ program define xtdpthresh, eclass sortpreserve
     // incompleteness flag -- unresolved is NOT rejected.
     ereturn scalar ci_unresolved = `ci_unres'
     ereturn scalar ci_incomplete = cond(missing(`ci_unres'), ., cond(`ci_unres' > 0, 1, 0))
+    // v0.9.36: boundary refinement of the inverted set
+    ereturn scalar cirefine = `cirefine'
+    ereturn scalar ci_refine_added = `ci_ref_add'
     // v0.9.3 R19 (#8): the confidence SET, not just its hull
     // v0.9.3 hotfix: -matrix X = r(name)- with a nonexistent r() matrix
     // silently creates a 1x1 missing matrix (the scalar-expression reading;
@@ -6723,6 +6734,171 @@ void xdpt2_cache_w2(struct xdpt2_gamma_cache rowvector cache, real matrix W2)
     }
 }
 
+// v0.9.36: xdpt2_fast_gmm_boot with the fixed second-step weight when w2m = 1
+// (the solve C_g2 of xdpt2_cache_w2 and the objective n g'W2 g), else the
+// one-step pair (C_g, W1) exactly as xdpt2_fast_gmm_boot.
+void xdpt2_fast_gmm_boot_w(real colvector Y_boot,
+                            struct xdpt2_gamma_cache scalar gc,
+                            real scalar w2m, real matrix W2,
+                            real scalar ok, real colvector theta,
+                            real scalar obj)
+{
+    real colvector ZY, r, g
+    if (!w2m) {
+        xdpt2_fast_gmm_boot(Y_boot, gc, ok, theta, obj)
+        return
+    }
+    ok = 0
+    if (gc.ok == 0 | gc.fast2_ok != 1) return
+    if (rows(Y_boot) != gc.n_rows) return
+    ZY = (*gc.pZ)' * Y_boot / gc.n_rows
+    theta = gc.C_g2 * ZY
+    if (hasmissing(theta)) return
+    r = Y_boot - gc.dW * theta
+    if (hasmissing(r)) return
+    g = (*gc.pZ)' * r / gc.n_rows
+    if (hasmissing(g)) return
+    obj = gc.n_rows * (g' * W2 * g)
+    if (obj >= .) return
+    ok = 1
+}
+
+// v0.9.36: candidate points for one round of boundary refinement of the
+// inverted threshold set. With a narrow set (a strong jump) the accepted
+// gridci() points are few and the true threshold lies BETWEEN grid points, so
+// the hull of accepted grid points misses it by discretization alone -- the
+// main source of undercoverage. Every gap between two adjacent evaluated
+// points (status 1/2) of which exactly one is accepted gets up to m new
+// points:
+//   jump: one support value per regime split strictly between the splits of
+//         the two ends (the jump design, hence the statistic, depends on
+//         gamma only through the split, constant on [q_(j), q_(j+1)));
+//   kink: m equally spaced interior points (the kink design moves with
+//         gamma itself).
+// Points already in the table are left out.
+real colvector xdpt2_ci_refine_points(real matrix ci_tab, real colvector supp,
+                                      real scalar flag_kink, real scalar m)
+{
+    real colvector ev, g, acc, out, cand, pick, lbv
+    real scalar j, a, b, lb, nc, k
+    out = J(0, 1, .)
+    if (rows(ci_tab) < 2 | m < 1) return(out)
+    ev = selectindex((ci_tab[., 6] :== 1) :| (ci_tab[., 6] :== 2))
+    if (rows(ev) < 2) return(out)
+    g = ci_tab[ev, 1]
+    acc = (ci_tab[ev, 4] :== 1)
+    for (j = 1; j < rows(ev); j++) {
+        if (acc[j] == acc[j + 1]) continue
+        a = g[j]
+        b = g[j + 1]
+        if (!(b > a)) continue
+        if (flag_kink) {
+            cand = xdpt2_rangen(a, b, m + 2)
+            cand = cand[|2 \ m + 1|]
+        }
+        else {
+            if (rows(supp) == 0) continue
+            // left end of the split of b; candidates lie in (a, lb)
+            lbv = select(supp, supp :<= b)
+            if (rows(lbv) == 0) continue
+            lb = max(lbv)
+            cand = select(supp, (supp :> a) :& (supp :< lb))
+            nc = rows(cand)
+            if (nc == 0) continue
+            if (nc > m) {
+                pick = J(m, 1, .)
+                for (k = 1; k <= m; k++) pick[k] = max((1, ceil(k * nc / (m + 1))))
+                cand = cand[uniqrows(pick)]
+            }
+        }
+        out = out \ cand
+    }
+    if (rows(out) == 0) return(out)
+    out = uniqrows(out)
+    cand = J(0, 1, .)
+    for (j = 1; j <= rows(out); j++) {
+        if (!any(ci_tab[., 1] :== out[j])) cand = cand \ out[j]
+    }
+    return(cand)
+}
+
+// v0.9.36: summary of a (merged, gamma-sorted) inversion table -- the rules
+// of xdpt2_grid_bootstrap (hull, segments, unresolved count, admitted span,
+// withdrawal of an incomplete inversion), plus, for the jump model, the
+// closure of each accepted segment to the regime-split cells of its end
+// points: every gamma in [q_(j), q_(j+1)) gives the same design and hence the
+// same statistic and bootstrap draws, so the whole cell is accepted with its
+// grid point. A segment end at the edge of the admitted CI grid is left as is
+// (the boundary warning is judged there).
+void xdpt2_ci_summarize(real matrix ci_tab, real colvector supp,
+                        real scalar flag_kink,
+                        real scalar gam_lo, real scalar gam_hi,
+                        real scalar ci_empty, real scalar ci_nseg,
+                        real matrix ci_seg, real scalar ci_unres,
+                        real scalar gci_adm, real scalar gci_lo,
+                        real scalar gci_hi)
+{
+    real scalar n, l, st, prev_acc, seg_lo, s
+    real colvector acc, v
+    n = rows(ci_tab)
+    acc = (ci_tab[., 4] :== 1)
+    gci_adm = 0
+    gci_lo = .
+    gci_hi = .
+    ci_unres = 0
+    for (l = 1; l <= n; l++) {
+        st = ci_tab[l, 6]
+        if (st == 4 | st == 5 | st == 6) ci_unres = ci_unres + 1
+        if (st == 3 | st == 4) continue
+        gci_adm = gci_adm + 1
+        if (gci_lo == .) gci_lo = ci_tab[l, 1]
+        gci_hi = ci_tab[l, 1]
+    }
+    gam_lo = .
+    gam_hi = .
+    ci_nseg = 0
+    ci_seg = J(0, 2, .)
+    prev_acc = 0
+    seg_lo = .
+    for (l = 1; l <= n; l++) {
+        if (acc[l] == 1) {
+            if (gam_lo == .) gam_lo = ci_tab[l, 1]
+            gam_hi = ci_tab[l, 1]
+            if (!prev_acc) {
+                ci_nseg = ci_nseg + 1
+                seg_lo = ci_tab[l, 1]
+            }
+            prev_acc = 1
+        }
+        else {
+            if (prev_acc) ci_seg = ci_seg \ (seg_lo, ci_tab[l - 1, 1])
+            prev_acc = 0
+        }
+    }
+    if (prev_acc) ci_seg = ci_seg \ (seg_lo, ci_tab[n, 1])
+    ci_empty = (gam_lo == .)
+    if (!flag_kink & rows(supp) > 0 & rows(ci_seg) > 0) {
+        for (s = 1; s <= rows(ci_seg); s++) {
+            if (ci_seg[s, 1] != gci_lo) {
+                v = select(supp, supp :<= ci_seg[s, 1])
+                if (rows(v) > 0) ci_seg[s, 1] = max(v)
+            }
+            if (ci_seg[s, 2] != gci_hi) {
+                v = select(supp, supp :> ci_seg[s, 2])
+                if (rows(v) > 0) ci_seg[s, 2] = min(v)
+            }
+        }
+        gam_lo = ci_seg[1, 1]
+        gam_hi = ci_seg[rows(ci_seg), 2]
+    }
+    if (ci_unres > 0) {
+        gam_lo = .
+        gam_hi = .
+        ci_empty = .
+        ci_nseg = .
+    }
+}
+
 // Grid-bootstrap inversion. The default is an xthenreg-style cluster wild
 // residual approximation; boottype(unit) is an experimental unit-resampling
 // extension. Neither path is certified as the exact Gong-Seo Algorithm 1.
@@ -7462,7 +7638,8 @@ real scalar xdpt2_continuity_test(struct xdpt2_unit rowvector units,
                                     real scalar t_min, real scalar t_max,
                                     real scalar n_boot,
                                     real scalar valid_out,
-                                    real scalar common_out)
+                                    real scalar common_out,
+                                    real scalar bt2s, real matrix bA)
 {
     real scalar g_kink, obj_kink, T_sample, T_boot_b, count_exceed, valid_boot
     real scalar b, gl, ok, obj_cur, n_u, u, i, ok_b, obj_kink_b, obj_jump_b
@@ -7502,6 +7679,21 @@ real scalar xdpt2_continuity_test(struct xdpt2_unit rowvector units,
                                             t_max, q_supp, min_user, tpl_k,
                                             tpl_k_st, cache_jump)
 
+    // v0.9.36 (power): with a two-step fit both models are compared on the
+    // criterion of the reported estimator -- the fixed second-step weight W2
+    // of the jump fit (bA), common to the kink and jump solves so that the
+    // nesting (T >= 0) is kept -- as the threshold CI does since 0.9.34. The
+    // one-step weight used up to 0.9.35 (the MA(1) H-matrix under FD) is
+    // efficient only for homoskedastic serially uncorrelated errors; the
+    // distance statistic under it has a noisier null distribution and lower
+    // power against a jump. After a one-step fallback W1 is kept.
+    real scalar w2c
+    w2c = (bt2s == 1 & rows(bA) > 0)
+    if (w2c) {
+        xdpt2_cache_w2(cache_kink, bA)
+        xdpt2_cache_w2(cache_jump, bA)
+    }
+
     // The computational comparison is nested only where BOTH specifications
     // solve on the same row sample with the same one-step criterion. The jump
     // design has more columns and can fail rank/conditioning at gamma values
@@ -7511,8 +7703,10 @@ real scalar xdpt2_continuity_test(struct xdpt2_unit rowvector units,
     real colvector common_C
     common_C = J(0, 1, 0)
     for (gl = 1; gl <= min((cols(cache_kink), cols(cache_jump))); gl++) {
-        if (!cache_kink[gl].ok | cache_kink[gl].fast_ok != 1) continue
-        if (!cache_jump[gl].ok | cache_jump[gl].fast_ok != 1) continue
+        if (!cache_kink[gl].ok |
+            (w2c ? cache_kink[gl].fast2_ok : cache_kink[gl].fast_ok) != 1) continue
+        if (!cache_jump[gl].ok |
+            (w2c ? cache_jump[gl].fast2_ok : cache_jump[gl].fast_ok) != 1) continue
         if (cache_kink[gl].n_rows != cache_jump[gl].n_rows) continue
         if (any(cache_kink[gl].uid :!= cache_jump[gl].uid)) continue
         if (any(cache_kink[gl].times :!= cache_jump[gl].times)) continue
@@ -7530,11 +7724,11 @@ real scalar xdpt2_continuity_test(struct xdpt2_unit rowvector units,
     common_eval_C = J(0, 1, 0)
     for (ci_C = 1; ci_C <= rows(common_C); ci_C++) {
         gl_1s = common_C[ci_C]
-        xdpt2_fast_gmm_boot(cache_kink[gl_1s].dY, cache_kink[gl_1s],
-                             ok_1s, theta_kcand, obj_kcand)
+        xdpt2_fast_gmm_boot_w(cache_kink[gl_1s].dY, cache_kink[gl_1s],
+                               w2c, bA, ok_1s, theta_kcand, obj_kcand)
         if (!ok_1s) continue
-        xdpt2_fast_gmm_boot(cache_kink[gl_1s].dY, cache_jump[gl_1s],
-                             ok_jmatch, theta_1s_dummy, obj_jmatch)
+        xdpt2_fast_gmm_boot_w(cache_kink[gl_1s].dY, cache_jump[gl_1s],
+                               w2c, bA, ok_jmatch, theta_1s_dummy, obj_jmatch)
         if (!ok_jmatch) continue
         common_eval_C = common_eval_C \ gl_1s
         // v0.9.14 R33 (#5): deterministic tie-break -- the selected kink
@@ -7573,15 +7767,33 @@ real scalar xdpt2_continuity_test(struct xdpt2_unit rowvector units,
     valid_boot = 0
 
     best_j_1s = .
+    real scalar idx_j
+    real colvector theta_jump_sample
+    idx_j = 0
     for (gl_1s = 1; gl_1s <= n1_t; gl_1s++) {
         if (!cache_jump[gl_1s].ok) continue
         if (cache_jump[gl_1s].n_rows != rows(dY_k)) continue
-        xdpt2_fast_gmm_boot(dY_k, cache_jump[gl_1s],
-                             ok_1s, theta_1s_dummy, obj_cur)
+        xdpt2_fast_gmm_boot_w(dY_k, cache_jump[gl_1s], w2c, bA,
+                               ok_1s, theta_1s_dummy, obj_cur)
         if (!ok_1s) continue
-        if (best_j_1s == . | obj_cur < best_j_1s) best_j_1s = obj_cur
+        if (best_j_1s == . | obj_cur < best_j_1s) {
+            best_j_1s = obj_cur
+            idx_j = gl_1s
+            theta_jump_sample = theta_1s_dummy
+        }
     }
-    if (best_k_1s == . | best_j_1s == .) return(.)
+    if (best_k_1s == . | best_j_1s == . | idx_j == 0) return(.)
+    // v0.9.36 (power): the bootstrap DGP is the restricted (kink) fit plus
+    // the UNRESTRICTED (jump) residuals, reweighted by cluster: restricted
+    // coefficients, unrestricted residuals, as in Gong-Seo Alg. 1 and the
+    // unit bootstrap of the CI. Under H0 both residual vectors estimate the
+    // same errors; under H1 the kink residuals also carry the omitted jump,
+    // delta*(1(q>gamma0) - kink fit), which inflated every bootstrap
+    // statistic and with it the critical value -- the continuity test lost
+    // power exactly where it should reject. dY and the row sample are the
+    // same for both models (common rows checked above).
+    r_kink = dY_k - cache_jump[idx_j].dW * theta_jump_sample
+    if (hasmissing(r_kink)) return(.)
     T_sample = best_k_1s - best_j_1s
     tol_nest = xdpt2_objtol(best_k_1s, best_j_1s, 1e-10)
     if (T_sample < -tol_nest) return(.)
@@ -7617,7 +7829,7 @@ real scalar xdpt2_continuity_test(struct xdpt2_unit rowvector units,
         for (gl_j = 1; gl_j <= n1_t; gl_j++) {
             if (!cache_jump[gl_j].ok) continue
             if (cache_jump[gl_j].n_rows != n_rows_k) continue
-            if (cache_jump[gl_j].fast_ok != 1) continue
+            if ((w2c ? cache_jump[gl_j].fast2_ok : cache_jump[gl_j].fast_ok) != 1) continue
             fast_j_C = fast_j_C \ gl_j
         }
     }
@@ -7639,10 +7851,18 @@ real scalar xdpt2_continuity_test(struct xdpt2_unit rowvector units,
         // passed by its factors, r_kink and ETA_C[uid_draw, .]
         F_C = dW_k * theta_kink_sample
         // v0.7.9 (D): preallocated stacks; values and row order identical
-        OBJk_C = xdpt2_fast_obj_split_list(F_C, r_kink, uid_draw, ETA_C,
-                                           cache_kink, fast_k_C)
-        OBJj_C = xdpt2_fast_obj_split_list(F_C, r_kink, uid_draw, ETA_C,
-                                           cache_jump, fast_j_C)
+        if (w2c) {
+            OBJk_C = xdpt2_fast_obj_split_list(F_C, r_kink, uid_draw, ETA_C,
+                                               cache_kink, fast_k_C, bA)
+            OBJj_C = xdpt2_fast_obj_split_list(F_C, r_kink, uid_draw, ETA_C,
+                                               cache_jump, fast_j_C, bA)
+        }
+        else {
+            OBJk_C = xdpt2_fast_obj_split_list(F_C, r_kink, uid_draw, ETA_C,
+                                               cache_kink, fast_k_C)
+            OBJj_C = xdpt2_fast_obj_split_list(F_C, r_kink, uid_draw, ETA_C,
+                                               cache_jump, fast_j_C)
+        }
         // The restricted minimum may use a gamma only when the matching
         // unrestricted jump solve is finite in that draw. The unrestricted
         // minimum itself still uses its full feasible set.
@@ -7683,11 +7903,11 @@ real scalar xdpt2_continuity_test(struct xdpt2_unit rowvector units,
             min_obj_kink_b = .
             for (ci_C = 1; ci_C <= rows(common_C); ci_C++) {
                 gl = common_C[ci_C]
-                xdpt2_fast_gmm_boot(Y_boot, cache_kink[gl],
-                                     ok_b, theta_cur, obj_kcand)
+                xdpt2_fast_gmm_boot_w(Y_boot, cache_kink[gl], w2c, bA,
+                                       ok_b, theta_cur, obj_kcand)
                 if (!ok_b) continue
-                xdpt2_fast_gmm_boot(Y_boot, cache_jump[gl],
-                                     ok_jmatch, theta_cur, obj_jmatch)
+                xdpt2_fast_gmm_boot_w(Y_boot, cache_jump[gl], w2c, bA,
+                                       ok_jmatch, theta_cur, obj_jmatch)
                 if (!ok_jmatch) continue
                 if (obj_kcand < min_obj_kink_b) min_obj_kink_b = obj_kcand
             }
@@ -7696,8 +7916,8 @@ real scalar xdpt2_continuity_test(struct xdpt2_unit rowvector units,
             for (gl_j = 1; gl_j <= n1_t; gl_j++) {
                 if (!cache_jump[gl_j].ok) continue
                 if (cache_jump[gl_j].n_rows != rows(Y_boot)) continue
-                xdpt2_fast_gmm_boot(Y_boot, cache_jump[gl_j],
-                                     ok_b, theta_cur, obj_cur)
+                xdpt2_fast_gmm_boot_w(Y_boot, cache_jump[gl_j], w2c, bA,
+                                       ok_b, theta_cur, obj_cur)
                 if (!ok_b) continue
                 if (obj_cur < min_obj_jump_b) min_obj_jump_b = obj_cur
             }
@@ -9078,6 +9298,9 @@ void xtdpthresh_run(string scalar depvar_name,
     ci_tab_r = J(0, 0, .)
     ci_seg_r = J(0, 0, .)
     ci_unres_r = .
+    // v0.9.36: points added by the boundary refinement (missing: no CI)
+    real scalar cref_added
+    cref_added = .
     gam_hi = .
     pval_lin = .
     pval_cont = .
@@ -9177,6 +9400,52 @@ void xtdpthresh_run(string scalar depvar_name,
                               best_twostep, best_A, resid_hat_v, gb_minB,
                               ci_tab_r, ci_seg_r, ci_unres_r,
                               tpl_main, tpl_main_st)
+        // v0.9.36: boundary refinement of the inverted set (cirefine(#)
+        // rounds). Each round evaluates new points in the gaps where the
+        // acceptance changes (xdpt2_ci_refine_points) with the same statistic
+        // and bootstrap; they are merged into the table and the set is
+        // summarized again, with the regime-split closure of the jump model.
+        // Refinement points that cannot be evaluated are dropped (they are
+        // additions; the gridci() inversion is complete without them). A set
+        // that is already incomplete is not refined. cirefine(0) leaves the
+        // 0.9.35 result unchanged.
+        real scalar n_cref, cref_it, cun_d, gmb_d
+        real scalar glo_d, ghi_d, cemp_d, cns_d, gad_d, gcl_d, gch_d
+        real colvector cref_new, cref_keep
+        real matrix ctab_add, cseg_add
+        n_cref = strtoreal(st_local("cirefine"))
+        if (n_cref >= .) n_cref = 0
+        cref_added = 0
+        if (n_cref > 0 & ci_unres_r == 0 & rows(ci_tab_r) > 0) {
+            for (cref_it = 1; cref_it <= n_cref; cref_it++) {
+                cref_new = xdpt2_ci_refine_points(ci_tab_r, q_split_supp,
+                                                  flag_kink, 10)
+                if (rows(cref_new) == 0) break
+                gmb_d = .
+                ctab_add = J(0, 6, .)
+                cseg_add = J(0, 2, .)
+                xdpt2_grid_bootstrap(units, cache_main, gamma_grid, cref_new,
+                                      q_eff, minreg_user,
+                                      ci_gmin, best_gamma,
+                                      method, flag_static, flag_kink,
+                                      t_min, t_max, n_boot, alpha,
+                                      glo_d, ghi_d, cemp_d, cns_d,
+                                      gad_d, gcl_d, gch_d,
+                                      best_twostep, best_A, resid_hat_v, gmb_d,
+                                      ctab_add, cseg_add, cun_d,
+                                      tpl_main, tpl_main_st)
+                if (rows(ctab_add) == 0) break
+                cref_keep = selectindex((ctab_add[., 6] :== 1) :|
+                                        (ctab_add[., 6] :== 2))
+                if (rows(cref_keep) == 0) break
+                ci_tab_r = sort(ci_tab_r \ ctab_add[cref_keep, .], 1)
+                cref_added = cref_added + rows(cref_keep)
+            }
+            xdpt2_ci_summarize(ci_tab_r, q_split_supp, flag_kink,
+                               gam_lo, gam_hi, ci_empty, ci_nseg,
+                               ci_seg_r, ci_unres_r, gci_adm, gci_lo, gci_hi)
+            gci_eff_n = rows(ci_tab_r)
+        }
         if (rows(ci_tab_r) > 0) {
             gci_eval = sum((ci_tab_r[., 6] :== 1) :| (ci_tab_r[., 6] :== 2))
         }
@@ -9208,7 +9477,8 @@ void xtdpthresh_run(string scalar depvar_name,
                                                     best_obj,
                                                     method, flag_static,
                                                     t_min, t_max, n_boot,
-                                                    cont_valid, cont_common)
+                                                    cont_valid, cont_common,
+                                                    best_twostep, best_A)
                 if (xdpt_verbose) printf("  Continuity p-value = %6.4f\n", pval_cont)
             }
         }
@@ -9635,6 +9905,7 @@ void xtdpthresh_run(string scalar depvar_name,
     if (rows(ci_tab_r) > 0) st_matrix("r(xdpt2_ci_grid)", ci_tab_r)
     if (rows(ci_seg_r) > 0) st_matrix("r(xdpt2_ci_segments)", ci_seg_r)
     st_numscalar("r(xdpt2_ci_unres)", ci_unres_r)
+    st_numscalar("r(xdpt2_ci_ref_add)", cref_added)
     st_numscalar("r(xdpt2_ci_empty)", ci_empty)
     st_numscalar("r(xdpt2_ci_nseg)",  ci_nseg)
     st_numscalar("r(xdpt2_pval_lin)", pval_lin)
@@ -10848,6 +11119,30 @@ end
 *   settings at N = 1600: 7.8 to 2.6 seconds per fit.
 * ---------------------------------------------------------------------------
 
+* ---------------------------------------------------------------------------
+* v0.9.36 (28sep2026): threshold-CI coverage and continuity-test power.
+*   (a) Undercoverage of the threshold set. The set was the hull of the
+*   accepted gridci() points. With a well-identified jump the accepted points
+*   are few, the true threshold lies between grid points, and the hull missed
+*   it by discretization alone. New cirefine(#) (default 3, 0 = as 0.9.35):
+*   each round evaluates up to 10 new points in every gap where acceptance
+*   changes -- for the jump model one support value per regime split, for the
+*   kink model equally spaced points -- with the same statistic and
+*   bootstrap, and merges them into e(ci_grid). Points that cannot be
+*   evaluated are dropped (the gridci() inversion is complete without them).
+*   For the jump model each accepted segment is then closed to the
+*   regime-split cells of its ends: the statistic is constant on
+*   [q_(j), q_(j+1)), so the whole cell is accepted with its point (a segment
+*   end at the edge of the CI grid is left as is). e(ci_refine_added) counts
+*   the added points.
+*   (b) Continuity-test power. The bootstrap DGP used the restricted (kink)
+*   residuals; under a jump they carry the omitted discontinuity, which
+*   inflated every bootstrap statistic and the critical value. It now uses
+*   the kink fit plus the unrestricted (jump) residuals, as Gong-Seo Alg. 1
+*   and boottype(unit). With a two-step fit both models are compared under
+*   the fixed second-step weight W2 of the jump fit (the criterion of the
+*   reported estimator, as the threshold CI since 0.9.34) instead of the
+*   one-step weight; after a one-step fallback W1 is kept.
 * ---------------------------------------------------------------------------
 * v0.9.35 (27sep2026): joint variance of the slopes and gamma-hat in the jump
 * model.
