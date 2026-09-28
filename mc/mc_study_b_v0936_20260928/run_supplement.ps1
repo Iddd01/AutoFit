@@ -26,6 +26,13 @@ function Hashes($directory,$names) {
 function Write-Utf8($path,$value) {
  [IO.File]::WriteAllText($path,$value,[Text.UTF8Encoding]::new($false))
 }
+# jobs.json stores the start time in ISO 8601 ('o'); ConvertFrom-Json may
+# return it as a string or a DateTime, and culture-dependent Parse can fail.
+function Started-Utc($v) {
+ if($v -is [DateTime]){return $v.ToUniversalTime()}
+ return [DateTime]::Parse([string]$v,[Globalization.CultureInfo]::InvariantCulture,
+  [Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+}
 function Live-Jobs {
  $jobsPath=Join-Path $run 'jobs.json'
  if(-not(Test-Path -LiteralPath $jobsPath)){return @()}
@@ -33,7 +40,7 @@ function Live-Jobs {
  return @($jobs | Where-Object {
    $p=Get-Process -Id $_.pid -ErrorAction SilentlyContinue
    $null -ne $p -and $p.ProcessName -eq 'StataMP-64' -and
-     [Math]::Abs(($p.StartTime.ToUniversalTime()-[DateTime]::Parse($_.started)).TotalSeconds) -lt 2
+     [Math]::Abs(($p.StartTime.ToUniversalTime()-(Started-Utc $_.started)).TotalSeconds) -lt 2
  })
 }
 if($Action -eq 'Fresh') {

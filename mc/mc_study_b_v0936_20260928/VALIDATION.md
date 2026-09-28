@@ -62,3 +62,12 @@ before any run, because the continuity test is outside the article's scope.
 replication reproduces the realized panel and gamma-hat of its Study B
 counterpart. A smoke (`-RepCap 1 -B 19 -Grid 10 -GridCI 10`) must pass before
 the formal run. Core and kink-supplement files are unchanged.
+
+## Launcher date parsing (28 September 2026, after the supp2 formal launch)
+
+`Live-Jobs` in `run_supp2.ps1` and `run_supplement.ps1` parsed the ISO start
+time with culture-dependent `[DateTime]::Parse`, which failed on the VPS while
+shards were live (`Status` error; running shards unaffected; `Merge` after all
+shards finish never reaches the parse). It now parses with the invariant
+culture and round-trip kind. Runs launched with the earlier launcher keep it
+(frozen by hash); check their progress through the `*_done_SH*.txt` markers.
