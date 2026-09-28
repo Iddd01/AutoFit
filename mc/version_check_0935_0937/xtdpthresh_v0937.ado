@@ -769,7 +769,7 @@ program define xtdpthresh, eclass sortpreserve
     local _dv_hit : list depvar in _all_rhs
     if `_dv_hit' {
         di as err "the dependent variable may not appear in indepvars, exogenous(), endogenous(), predetermined(), or iv()"
-        di as err "  (the dynamic model adds L.`depvar' automatically; use static to suppress it)"
+        di as err "  (the dynamic model adds L.`depvar' automatically)"
         exit 198
     }
     if "`q_var'" == "`depvar'" {
@@ -835,7 +835,7 @@ program define xtdpthresh, eclass sortpreserve
                     }
                     if `_purelf' & `_netlag' == 1 {
                         di as err "L.`depvar' is added automatically in the dynamic model"
-                        di as err "  `_ul' is algebraically the same lag; remove it, or specify static"
+                        di as err "  `_ul' is algebraically the same lag; remove it"
                         exit 198
                     }
                 }
@@ -2172,7 +2172,7 @@ program define xtdpthresh, eclass sortpreserve
         else ereturn local continuity_test "nested comparison; not run"
     }
     else if `flag_kink' ereturn local continuity_test "not run; the fitted model is the kink model"
-    else if "`conttest'" == "" ereturn local continuity_test "not run (conttest not specified)"
+    else if "`conttest'" == "" ereturn local continuity_test "not run"
     else ereturn local continuity_test "not run; q is not a contemporaneous regressor, so the kink model is not nested"
     if `do_grid_ci' {
         ereturn local threshold_bootstrap_conditioning "valid fixed-B solves only; unresolved points are withdrawn under the validity rule"
@@ -11072,8 +11072,10 @@ end
 *   Estimates, confidence sets, citest() and the linearity p-value equal
 *   0.9.36 (each bootstrap component has its own seed).
 *   (h) The help file documents only the procedures evaluated in Nguyen and
-*   Lai (2026). static, td, boottype(unit), coefboot()/coefcitype() and
-*   conttest remain in the code but are no longer documented.
+*   Lai (2026) and td (partialling out time dummies, algebraically the
+*   dummy-variable specification). static, boottype(unit),
+*   coefboot()/coefcitype() and conttest remain in the code but are not
+*   documented; error messages no longer suggest them.
 * ---------------------------------------------------------------------------
 * v0.9.36 (28sep2026): continuity-test power; threshold-test diagnostic.
 *   (a) Continuity-test power. The bootstrap DGP used the restricted (kink)

@@ -1,4 +1,4 @@
-*! version 0.9.37  28sep2026
+*! version 0.9.36  28sep2026
 *! xtdpthresh -- dynamic panel threshold regression (Seo-Shin 2016; Gong-Seo 2026)
 *! Duy Chinh Nguyen (IU VNU-HCM) & Nhat Duy Lai (SGU, corresponding). See -help xtdpthresh-.
 
@@ -65,7 +65,6 @@ program define xtdpthresh, eclass sortpreserve
         NOWARN                                      ///
         EXPORTGMM                                   ///
         NOTEST                                      ///
-        CONTtest                                    ///
         VCE(string)                                 ///
         COEFCItype(string)                          ///
         COEFBoot(string)                            ///
@@ -366,13 +365,6 @@ program define xtdpthresh, eclass sortpreserve
     // size of the test from the discretization of the confidence set)
     if "`citest'" != "" & !`_will_boot' {
         di as err "citest() requires the grid bootstrap (remove noboot)"
-        exit 198
-    }
-    // v0.9.37: the continuity test is opt-in (conttest). Its statistic is
-    // Gong-Seo's (sec. 3.2, efficient weight); the article evaluates the
-    // threshold set and the linearity test, not this test.
-    if "`conttest'" != "" & (!`_will_boot' | `flag_notest') {
-        di as err "conttest requires the bootstrap tests (remove noboot and notest)"
         exit 198
     }
     if `_will_boot' & `gridci' < 100 & "`nowarn'" == "" {
@@ -732,15 +724,11 @@ program define xtdpthresh, eclass sortpreserve
     // no-op operators such as L0.q to q, so this test is exact.
     local _rhs_expanded "`indepvars' `exog_extra' `endog' `predet'"
     local _q_rhs : list q_var in _rhs_expanded
-    local flag_cont_test = cond(!`flag_kink' & `_q_rhs' & "`conttest'" != "", 1, 0)
-    if "`conttest'" != "" & `flag_kink' {
-        di as err "conttest is not allowed with kink: the fitted model is the kink model"
-        exit 198
-    }
-    if "`conttest'" != "" & !`_q_rhs' {
-        di as err "conttest requires " as res "`q_var'" as err " as a contemporaneous regressor;"
-        di as err "otherwise the kink model is not nested in the estimated jump model."
-        exit 198
+    local flag_cont_test = cond(!`flag_kink' & `_q_rhs', 1, 0)
+    if !`flag_kink' & !`_q_rhs' & `_will_boot' & !`flag_notest' & "`nowarn'" == "" {
+        di as text "Note: continuity test omitted because " as res "`q_var'" ///
+            as text " is not a contemporaneous RHS regressor;"
+        di as text "the kink model would not be nested in the estimated jump model."
     }
 
     // v0.7.13 (audit): duplicates WITHIN one group also survive -syntax-
@@ -769,7 +757,7 @@ program define xtdpthresh, eclass sortpreserve
     local _dv_hit : list depvar in _all_rhs
     if `_dv_hit' {
         di as err "the dependent variable may not appear in indepvars, exogenous(), endogenous(), predetermined(), or iv()"
-        di as err "  (the dynamic model adds L.`depvar' automatically)"
+        di as err "  (the dynamic model adds L.`depvar' automatically; use static to suppress it)"
         exit 198
     }
     if "`q_var'" == "`depvar'" {
@@ -835,7 +823,7 @@ program define xtdpthresh, eclass sortpreserve
                     }
                     if `_purelf' & `_netlag' == 1 {
                         di as err "L.`depvar' is added automatically in the dynamic model"
-                        di as err "  `_ul' is algebraically the same lag; remove it"
+                        di as err "  `_ul' is algebraically the same lag; remove it, or specify static"
                         exit 198
                     }
                 }
@@ -1793,8 +1781,8 @@ program define xtdpthresh, eclass sortpreserve
             di as text "   Threshold test (H0: γ = " as res %9.0g `citest_m'[1, 1] ///
                as text ")  D = " as res %7.3f `citest_m'[1, 2] ///
                as text "  p = " as res %6.4f `citest_m'[1, 7] ///
-               as text "  " cond(`citest_m'[1, 4] == 1, "not rejected", "rejected") ///
-               as text " at the " as res "`=100-`level''%" as text " level"
+               as text "  " cond(`citest_m'[1, 4] == 1, "accept", "reject") ///
+               as text " at " as res "`level'%"
         }
         else {
             di as text "   Threshold test (H0: γ = " as res %9.0g `citest_m'[1, 1] ///
@@ -1803,11 +1791,10 @@ program define xtdpthresh, eclass sortpreserve
         }
     }
     // v0.9.10 R28: gamma-hat is grid-SELECTED and can be irregular under
-    // the null, so the chi-square reference for J is a DIAGNOSTIC, not a
-    // fully standard specification test. v0.9.37: df = L - k - 1 counts
-    // gamma as an estimated parameter (regular identification), so the line
-    // no longer says "conditional on gamma-hat".
-    di as text "   Diagnostic Hansen J = " as res %6.3f `hansen' ///
+    // the null, so the chi-square reference for J is a conditional
+    // DIAGNOSTIC, not a fully standard specification test -- say so on the
+    // line itself (the last place the output still read like plain GMM).
+    di as text "   Diagnostic Hansen J (conditional on γ̂) = " as res %6.3f `hansen' ///
        as text "  (df=" as res %2.0f `hansen_df' ///
        as text ")  p = " as res %6.4f `hansen_p'
     // v0.9.29: say why J is missing instead of printing a bare ".".
@@ -2040,7 +2027,7 @@ program define xtdpthresh, eclass sortpreserve
     ereturn scalar N_stack   = `=`nused''
     ereturn local predict    "xtdpthresh_p"
     ereturn local cmdline    `"xtdpthresh `cmdline'"'
-    ereturn local cmdversion "0.9.37"
+    ereturn local cmdversion "0.9.36"
     ereturn local searchmode "`searchmode'"
     ereturn scalar searchtol = `searchtol'
     ereturn scalar searchmax = `searchmax_effective'
@@ -2172,7 +2159,6 @@ program define xtdpthresh, eclass sortpreserve
         else ereturn local continuity_test "nested comparison; not run"
     }
     else if `flag_kink' ereturn local continuity_test "not run; the fitted model is the kink model"
-    else if "`conttest'" == "" ereturn local continuity_test "not run"
     else ereturn local continuity_test "not run; q is not a contemporaneous regressor, so the kink model is not nested"
     if `do_grid_ci' {
         ereturn local threshold_bootstrap_conditioning "valid fixed-B solves only; unresolved points are withdrawn under the validity rule"
@@ -2291,10 +2277,6 @@ program define xtdpthresh, eclass sortpreserve
     ereturn scalar N_trans   = `n_trans'
     ereturn scalar N_iv      = `n_iv'
     ereturn scalar N_units   = `n_units'
-    // v0.9.37: the VCE, Hansen J and the wild bootstrap cluster on the panel
-    // unit; N_clust counts the units with a transformed equation.
-    ereturn scalar N_clust   = `n_units'
-    ereturn local clustvar "`panelvar'"
     ereturn scalar N_switch  = `n_switch'
     ereturn scalar hansen    = `hansen'
     ereturn scalar hansen_df = `hansen_df'
@@ -4735,8 +4717,8 @@ struct xdpt2_gamma_cache rowvector xdpt2_build_gamma_cache_t(
 // cluster wild residual bootstrap (unit-level Mammen weights, fixed W_first,
 // 1-step GMM per draw) — NOT the exact Gong-Seo (2026) Algorithm 1, which
 // resamples (x, z, resid) jointly at the unit level and recenters the
-// bootstrap moments. Gong-Seo prove validity for their algorithm; the
-// finite-sample behaviour of this scheme is assessed by simulation.
+// bootstrap moments. Gong-Seo validity is proved for the exact algorithm;
+// this scheme is supported by the Monte Carlo evidence in the paper.
 // The fixed W_first shared between sample and bootstrap sides keeps the
 // two statistics on the same criterion.
 void xdpt2_fast_gmm_boot(real colvector Y_boot,
@@ -7090,7 +7072,6 @@ void xdpt2_grid_bootstrap(struct xdpt2_unit rowvector units,
         // slower (e.g., γ = 0 when q >= 0 is also a regressor, where
         // q*1(q > γ) equals q).
         D_vec = J(n_boot, 1, .)
-        if (args() == 32) D_out = J(0, 1, .)
         real scalar n_rows_r_b, use_batch_b
         real colvector fast_gb_b
         real matrix ETA_b, OBJ_b
@@ -7618,11 +7599,6 @@ real scalar xdpt2_continuity_test(struct xdpt2_unit rowvector units,
     // where the kink design succeeds. Selecting the restricted minimum from
     // those kink-only points and then clamping a negative distance to zero
     // silently turned a nonnested numerical comparison into a p-value.
-    // Gong-Seo (2026, eq. in sec. 2 and Theorem 4): the continuity statistic
-    // is the GMM distance under the efficient second-step weight. If that
-    // solve leaves fewer than two jointly feasible points the test is not
-    // reported; it is never recomputed under W1, a different statistic that
-    // their theory does not cover (v0.9.37 review).
     real colvector common_C
     common_C = J(0, 1, 0)
     for (gl = 1; gl <= min((cols(cache_kink), cols(cache_jump))); gl++) {
@@ -7689,26 +7665,13 @@ real scalar xdpt2_continuity_test(struct xdpt2_unit rowvector units,
     count_exceed = 0
     valid_boot = 0
 
-    // v0.9.37: jump entries that may enter the comparison are those on the
-    // kink rows (same uid, times and dY), not merely the same row count; the
-    // jump residuals of the bootstrap DGP come from one of them.
-    real colvector jalign
-    jalign = J(n1_t, 1, 0)
-    for (gl_1s = 1; gl_1s <= n1_t; gl_1s++) {
-        if (!cache_jump[gl_1s].ok) continue
-        if (cache_jump[gl_1s].n_rows != rows(dY_k)) continue
-        if (any(cache_jump[gl_1s].uid :!= uid_k)) continue
-        if (any(cache_jump[gl_1s].times :!= times_k)) continue
-        if (any(cache_jump[gl_1s].dY :!= dY_k)) continue
-        jalign[gl_1s] = 1
-    }
-
     best_j_1s = .
     real scalar idx_j
     real colvector theta_jump_sample
     idx_j = 0
     for (gl_1s = 1; gl_1s <= n1_t; gl_1s++) {
-        if (!jalign[gl_1s]) continue
+        if (!cache_jump[gl_1s].ok) continue
+        if (cache_jump[gl_1s].n_rows != rows(dY_k)) continue
         xdpt2_fast_gmm_boot_w(dY_k, cache_jump[gl_1s], w2c, bA,
                                ok_1s, theta_1s_dummy, obj_cur)
         if (!ok_1s) continue
@@ -7727,7 +7690,7 @@ real scalar xdpt2_continuity_test(struct xdpt2_unit rowvector units,
     // delta*(1(q>gamma0) - kink fit), which inflated every bootstrap
     // statistic and with it the critical value -- the continuity test lost
     // power exactly where it should reject. dY and the row sample are the
-    // same for both models (rows aligned by jalign above).
+    // same for both models (common rows checked above).
     r_kink = dY_k - cache_jump[idx_j].dW * theta_jump_sample
     if (hasmissing(r_kink)) return(.)
     T_sample = best_k_1s - best_j_1s
@@ -7763,7 +7726,8 @@ real scalar xdpt2_continuity_test(struct xdpt2_unit rowvector units,
     fast_j_C = J(0, 1, 0)
     if (use_batch_C) {
         for (gl_j = 1; gl_j <= n1_t; gl_j++) {
-            if (!jalign[gl_j]) continue
+            if (!cache_jump[gl_j].ok) continue
+            if (cache_jump[gl_j].n_rows != n_rows_k) continue
             if ((w2c ? cache_jump[gl_j].fast2_ok : cache_jump[gl_j].fast_ok) != 1) continue
             fast_j_C = fast_j_C \ gl_j
         }
@@ -7849,7 +7813,8 @@ real scalar xdpt2_continuity_test(struct xdpt2_unit rowvector units,
 
             min_obj_jump_b = .
             for (gl_j = 1; gl_j <= n1_t; gl_j++) {
-                if (!jalign[gl_j]) continue
+                if (!cache_jump[gl_j].ok) continue
+                if (cache_jump[gl_j].n_rows != rows(Y_boot)) continue
                 xdpt2_fast_gmm_boot_w(Y_boot, cache_jump[gl_j], w2c, bA,
                                        ok_b, theta_cur, obj_cur)
                 if (!ok_b) continue
@@ -11044,38 +11009,6 @@ end
 *   settings at N = 1600: 7.8 to 2.6 seconds per fit.
 * ---------------------------------------------------------------------------
 
-* ---------------------------------------------------------------------------
-* v0.9.37 (28sep2026): continuity-test hardening (code review of 0.9.36).
-*   (a) The jump entries of the continuity comparison (its minimum, the
-*   batched and scalar bootstrap alternatives, and the source of the jump
-*   residuals) must lie on the kink rows -- same uid, times and dY -- not
-*   merely have the same row count. The rows do not depend on gamma by
-*   construction, so results are unchanged; the guard makes it explicit.
-*   (b) No fallback to the first-step weight when the fixed-W2 solve leaves
-*   fewer than two jointly feasible points: the test is then not reported.
-*   Gong-Seo's statistic (sec. 3.2) uses the efficient weight W_n and the
-*   limit of their Theorem 4 is built on Omega^{-1}; a W1 distance is a
-*   different statistic their theory does not cover (unchanged from 0.9.36).
-*   (c) The draws returned for citest() are reset at each point, so they can
-*   only belong to the point just evaluated.
-*   (d) The citest() line reads "rejected/not rejected at the 5% level"
-*   (was "reject at 95%").
-*   (e) The continuity test is opt-in: option -conttest-. Without it the
-*   test is not run and e(pval_cont) is missing; with it the statistic,
-*   seed and p-value are those of 0.9.36. conttest is an error with kink,
-*   noboot or notest, or when q is not a contemporaneous regressor (the
-*   note printed for that case is gone).
-*   (f) The Hansen J line no longer says "conditional on gamma-hat": its
-*   df = L - k - 1 counts gamma as an estimated parameter.
-*   (g) e(clustvar) (panel variable) and e(N_clust) (= e(N_units)) are
-*   posted: the VCE, Hansen J and the wild bootstrap cluster on the unit.
-*   Estimates, confidence sets, citest() and the linearity p-value equal
-*   0.9.36 (each bootstrap component has its own seed).
-*   (h) The help file documents only the procedures evaluated in Nguyen and
-*   Lai (2026) and td (partialling out time dummies, algebraically the
-*   dummy-variable specification). static, boottype(unit),
-*   coefboot()/coefcitype() and conttest remain in the code but are not
-*   documented; error messages no longer suggest them.
 * ---------------------------------------------------------------------------
 * v0.9.36 (28sep2026): continuity-test power; threshold-test diagnostic.
 *   (a) Continuity-test power. The bootstrap DGP used the restricted (kink)
