@@ -49,7 +49,6 @@ program define xtdpthresh, eclass sortpreserve
         SEARCHMAX(integer -1)                       ///
         SEARCHTol(real 1e-8)                        ///
         GRIDCI(integer 100)                         ///
-        CIREFine(integer 0)                         ///
         CITest(numlist max=1 min=1)                 ///
         GRIDType(string)                            ///
         MINREGime(integer 0)                        ///
@@ -359,12 +358,6 @@ program define xtdpthresh, eclass sortpreserve
     }
     if `_will_boot' & (missing(`gridci') | `gridci' < 10) {
         di as err "gridci() must be at least 10"
-        exit 198
-    }
-    // v0.9.36: cirefine(#) rounds of boundary refinement of the inverted
-    // threshold set (0 = the gridci() points only, as up to 0.9.35)
-    if missing(`cirefine') | `cirefine' < 0 | `cirefine' > 10 {
-        di as err "option cirefine() must be an integer between 0 and 10"
         exit 198
     }
     // v0.9.36: citest(#) runs the grid-bootstrap test of H0: gamma = # alone
@@ -1483,7 +1476,6 @@ program define xtdpthresh, eclass sortpreserve
     cap matrix `ci_tab_m' = r(xdpt2_ci_grid)
     cap matrix `ci_seg_m' = r(xdpt2_ci_segments)
     local ci_unres = r(xdpt2_ci_unres)
-    local ci_ref_add = r(xdpt2_ci_ref_add)
     tempname citest_m
     local _has_citest 0
     cap matrix `citest_m' = r(xdpt2_citest)
@@ -2397,9 +2389,6 @@ program define xtdpthresh, eclass sortpreserve
     // incompleteness flag -- unresolved is NOT rejected.
     ereturn scalar ci_unresolved = `ci_unres'
     ereturn scalar ci_incomplete = cond(missing(`ci_unres'), ., cond(`ci_unres' > 0, 1, 0))
-    // v0.9.36: boundary refinement of the inverted set
-    ereturn scalar cirefine = `cirefine'
-    ereturn scalar ci_refine_added = `ci_ref_add'
     // v0.9.36: citest(#) -- the pointwise grid-bootstrap test at gamma = #
     if `_has_citest' {
         ereturn scalar citest_gamma  = `citest_m'[1, 1]
@@ -6805,142 +6794,6 @@ void xdpt2_fast_gmm_boot_w(real colvector Y_boot,
     ok = 1
 }
 
-// v0.9.36: candidate points for one round of boundary refinement of the
-// inverted threshold set. With a narrow set (a strong jump) the accepted
-// gridci() points are few and the true threshold lies BETWEEN grid points, so
-// the hull of accepted grid points misses it by discretization alone -- the
-// main source of undercoverage. Every gap between two adjacent evaluated
-// points (status 1/2) of which exactly one is accepted gets up to m new
-// points:
-//   jump: one support value per regime split strictly between the splits of
-//         the two ends (the jump design, hence the statistic, depends on
-//         gamma only through the split, constant on [q_(j), q_(j+1)));
-//   kink: m equally spaced interior points (the kink design moves with
-//         gamma itself).
-// Points already in the table are left out.
-real colvector xdpt2_ci_refine_points(real matrix ci_tab, real colvector supp,
-                                      real scalar flag_kink, real scalar m)
-{
-    real colvector ev, g, acc, out, cand, pick, lbv
-    real scalar j, a, b, lb, nc, k
-    out = J(0, 1, .)
-    if (rows(ci_tab) < 2 | m < 1) return(out)
-    ev = selectindex((ci_tab[., 6] :== 1) :| (ci_tab[., 6] :== 2))
-    if (rows(ev) < 2) return(out)
-    g = ci_tab[ev, 1]
-    acc = (ci_tab[ev, 4] :== 1)
-    for (j = 1; j < rows(ev); j++) {
-        if (acc[j] == acc[j + 1]) continue
-        a = g[j]
-        b = g[j + 1]
-        if (!(b > a)) continue
-        if (flag_kink) {
-            cand = xdpt2_rangen(a, b, m + 2)
-            cand = cand[|2 \ m + 1|]
-        }
-        else {
-            if (rows(supp) == 0) continue
-            // left end of the split of b; candidates lie in (a, lb)
-            lbv = select(supp, supp :<= b)
-            if (rows(lbv) == 0) continue
-            lb = max(lbv)
-            cand = select(supp, (supp :> a) :& (supp :< lb))
-            nc = rows(cand)
-            if (nc == 0) continue
-            if (nc > m) {
-                pick = J(m, 1, .)
-                for (k = 1; k <= m; k++) pick[k] = max((1, ceil(k * nc / (m + 1))))
-                cand = cand[uniqrows(pick)]
-            }
-        }
-        out = out \ cand
-    }
-    if (rows(out) == 0) return(out)
-    out = uniqrows(out)
-    cand = J(0, 1, .)
-    for (j = 1; j <= rows(out); j++) {
-        if (!any(ci_tab[., 1] :== out[j])) cand = cand \ out[j]
-    }
-    return(cand)
-}
-
-// v0.9.36: summary of a (merged, gamma-sorted) inversion table -- the rules
-// of xdpt2_grid_bootstrap (hull, segments, unresolved count, admitted span,
-// withdrawal of an incomplete inversion), plus, for the jump model, the
-// closure of each accepted segment to the regime-split cells of its end
-// points: every gamma in [q_(j), q_(j+1)) gives the same design and hence the
-// same statistic and bootstrap draws, so the whole cell is accepted with its
-// grid point. A segment end at the edge of the admitted CI grid is left as is
-// (the boundary warning is judged there).
-void xdpt2_ci_summarize(real matrix ci_tab, real colvector supp,
-                        real scalar flag_kink,
-                        real scalar gam_lo, real scalar gam_hi,
-                        real scalar ci_empty, real scalar ci_nseg,
-                        real matrix ci_seg, real scalar ci_unres,
-                        real scalar gci_adm, real scalar gci_lo,
-                        real scalar gci_hi)
-{
-    real scalar n, l, st, prev_acc, seg_lo, s
-    real colvector acc, v
-    n = rows(ci_tab)
-    acc = (ci_tab[., 4] :== 1)
-    gci_adm = 0
-    gci_lo = .
-    gci_hi = .
-    ci_unres = 0
-    for (l = 1; l <= n; l++) {
-        st = ci_tab[l, 6]
-        if (st == 4 | st == 5 | st == 6) ci_unres = ci_unres + 1
-        if (st == 3 | st == 4) continue
-        gci_adm = gci_adm + 1
-        if (gci_lo == .) gci_lo = ci_tab[l, 1]
-        gci_hi = ci_tab[l, 1]
-    }
-    gam_lo = .
-    gam_hi = .
-    ci_nseg = 0
-    ci_seg = J(0, 2, .)
-    prev_acc = 0
-    seg_lo = .
-    for (l = 1; l <= n; l++) {
-        if (acc[l] == 1) {
-            if (gam_lo == .) gam_lo = ci_tab[l, 1]
-            gam_hi = ci_tab[l, 1]
-            if (!prev_acc) {
-                ci_nseg = ci_nseg + 1
-                seg_lo = ci_tab[l, 1]
-            }
-            prev_acc = 1
-        }
-        else {
-            if (prev_acc) ci_seg = ci_seg \ (seg_lo, ci_tab[l - 1, 1])
-            prev_acc = 0
-        }
-    }
-    if (prev_acc) ci_seg = ci_seg \ (seg_lo, ci_tab[n, 1])
-    ci_empty = (gam_lo == .)
-    if (!flag_kink & rows(supp) > 0 & rows(ci_seg) > 0) {
-        for (s = 1; s <= rows(ci_seg); s++) {
-            if (ci_seg[s, 1] != gci_lo) {
-                v = select(supp, supp :<= ci_seg[s, 1])
-                if (rows(v) > 0) ci_seg[s, 1] = max(v)
-            }
-            if (ci_seg[s, 2] != gci_hi) {
-                v = select(supp, supp :> ci_seg[s, 2])
-                if (rows(v) > 0) ci_seg[s, 2] = min(v)
-            }
-        }
-        gam_lo = ci_seg[1, 1]
-        gam_hi = ci_seg[rows(ci_seg), 2]
-    }
-    if (ci_unres > 0) {
-        gam_lo = .
-        gam_hi = .
-        ci_empty = .
-        ci_nseg = .
-    }
-}
-
 // Grid-bootstrap inversion. The default is an xthenreg-style cluster wild
 // residual approximation; boottype(unit) is an experimental unit-resampling
 // extension. Neither path is certified as the exact Gong-Seo Algorithm 1.
@@ -9344,9 +9197,6 @@ void xtdpthresh_run(string scalar depvar_name,
     ci_tab_r = J(0, 0, .)
     ci_seg_r = J(0, 0, .)
     ci_unres_r = .
-    // v0.9.36: points added by the boundary refinement (missing: no CI)
-    real scalar cref_added
-    cref_added = .
     // v0.9.36: citest(#) result (gamma, D, crit, accept, draws, status, p)
     real matrix cit_row
     real scalar seed_citest
@@ -9451,52 +9301,6 @@ void xtdpthresh_run(string scalar depvar_name,
                               best_twostep, best_A, resid_hat_v, gb_minB,
                               ci_tab_r, ci_seg_r, ci_unres_r,
                               tpl_main, tpl_main_st)
-        // v0.9.36: boundary refinement of the inverted set (cirefine(#)
-        // rounds). Each round evaluates new points in the gaps where the
-        // acceptance changes (xdpt2_ci_refine_points) with the same statistic
-        // and bootstrap; they are merged into the table and the set is
-        // summarized again, with the regime-split closure of the jump model.
-        // Refinement points that cannot be evaluated are dropped (they are
-        // additions; the gridci() inversion is complete without them). A set
-        // that is already incomplete is not refined. cirefine(0) leaves the
-        // 0.9.35 result unchanged.
-        real scalar n_cref, cref_it, cun_d, gmb_d
-        real scalar glo_d, ghi_d, cemp_d, cns_d, gad_d, gcl_d, gch_d
-        real colvector cref_new, cref_keep
-        real matrix ctab_add, cseg_add
-        n_cref = strtoreal(st_local("cirefine"))
-        if (n_cref >= .) n_cref = 0
-        cref_added = 0
-        if (n_cref > 0 & ci_unres_r == 0 & rows(ci_tab_r) > 0) {
-            for (cref_it = 1; cref_it <= n_cref; cref_it++) {
-                cref_new = xdpt2_ci_refine_points(ci_tab_r, q_split_supp,
-                                                  flag_kink, 10)
-                if (rows(cref_new) == 0) break
-                gmb_d = .
-                ctab_add = J(0, 6, .)
-                cseg_add = J(0, 2, .)
-                xdpt2_grid_bootstrap(units, cache_main, gamma_grid, cref_new,
-                                      q_eff, minreg_user,
-                                      ci_gmin, best_gamma,
-                                      method, flag_static, flag_kink,
-                                      t_min, t_max, n_boot, alpha,
-                                      glo_d, ghi_d, cemp_d, cns_d,
-                                      gad_d, gcl_d, gch_d,
-                                      best_twostep, best_A, resid_hat_v, gmb_d,
-                                      ctab_add, cseg_add, cun_d,
-                                      tpl_main, tpl_main_st)
-                if (rows(ctab_add) == 0) break
-                cref_keep = selectindex((ctab_add[., 6] :== 1) :|
-                                        (ctab_add[., 6] :== 2))
-                if (rows(cref_keep) == 0) break
-                ci_tab_r = sort(ci_tab_r \ ctab_add[cref_keep, .], 1)
-                cref_added = cref_added + rows(cref_keep)
-            }
-            xdpt2_ci_summarize(ci_tab_r, q_split_supp, flag_kink,
-                               gam_lo, gam_hi, ci_empty, ci_nseg,
-                               ci_seg_r, ci_unres_r, gci_adm, gci_lo, gci_hi)
-            gci_eff_n = rows(ci_tab_r)
-        }
         if (rows(ci_tab_r) > 0) {
             gci_eval = sum((ci_tab_r[., 6] :== 1) :| (ci_tab_r[., 6] :== 2))
         }
@@ -9990,7 +9794,6 @@ void xtdpthresh_run(string scalar depvar_name,
     if (rows(ci_tab_r) > 0) st_matrix("r(xdpt2_ci_grid)", ci_tab_r)
     if (rows(ci_seg_r) > 0) st_matrix("r(xdpt2_ci_segments)", ci_seg_r)
     st_numscalar("r(xdpt2_ci_unres)", ci_unres_r)
-    st_numscalar("r(xdpt2_ci_ref_add)", cref_added)
     if (rows(cit_row) == 1) st_matrix("r(xdpt2_citest)", cit_row)
     st_numscalar("r(xdpt2_seed_citest)", seed_citest)
     st_numscalar("r(xdpt2_ci_empty)", ci_empty)
@@ -11207,22 +11010,8 @@ end
 * ---------------------------------------------------------------------------
 
 * ---------------------------------------------------------------------------
-* v0.9.36 (28sep2026): threshold-CI coverage and continuity-test power.
-*   (a) Optional boundary refinement of the inverted set. The accepted
-*   gridci() points are a finite subset of {gamma : test accepts}; a point
-*   between grid points is never tested. New cirefine(#) (default 0 = as
-*   0.9.35; see (d) for why it is off by default):
-*   each round evaluates up to 10 new points in every gap where acceptance
-*   changes -- for the jump model one support value per regime split, for the
-*   kink model equally spaced points -- with the same statistic and
-*   bootstrap, and merges them into e(ci_grid). Points that cannot be
-*   evaluated are dropped (the gridci() inversion is complete without them).
-*   For the jump model each accepted segment is then closed to the
-*   regime-split cells of its ends: the statistic is constant on
-*   [q_(j), q_(j+1)), so the whole cell is accepted with its point (a segment
-*   end at the edge of the CI grid is left as is). e(ci_refine_added) counts
-*   the added points.
-*   (b) Continuity-test power. The bootstrap DGP used the restricted (kink)
+* v0.9.36 (28sep2026): continuity-test power; threshold-test diagnostic.
+*   (a) Continuity-test power. The bootstrap DGP used the restricted (kink)
 *   residuals; under a jump they carry the omitted discontinuity, which
 *   inflated every bootstrap statistic and the critical value. It now uses
 *   the kink fit plus the unrestricted (jump) residuals, as Gong-Seo Alg. 1
@@ -11230,16 +11019,15 @@ end
 *   the fixed second-step weight W2 of the jump fit (the criterion of the
 *   reported estimator, as the threshold CI since 0.9.34) instead of the
 *   one-step weight; after a one-step fallback W1 is kept.
-*   (c) New diagnostic citest(#): the grid-bootstrap test of H0: gamma = #
+*   (b) New diagnostic citest(#): the grid-bootstrap test of H0: gamma = #
 *   alone, with the statistic, bootstrap and weight of the confidence set,
 *   run last under its own component seed (other results unchanged). Returns
 *   e(citest_D), e(citest_crit), e(citest_accept), e(citest_p) (add-one
 *   bootstrap p-value; p > alpha iff accepted), e(citest_status) (status
 *   code of e(ci_grid)) and e(citest_draws). At the true threshold of a
 *   simulation its rejection rate is the size of the test that the set
-*   inverts: near alpha, remaining undercoverage is discretization of the set;
-*   above alpha, the bootstrap itself.
-*   (d) Coverage convention. Gong and Seo (2026, eq. 7 and Theorem 5) define
+*   inverts; its acceptance rate is the coverage proved by Gong-Seo.
+*   (c) Coverage convention. Gong and Seo (2026, eq. 7 and Theorem 5) define
 *   the set as {gamma in the grid : accepted} and prove
 *   P(gamma0 in set) -> 1 - tau, i.e. acceptance of the test AT gamma0; their
 *   Monte Carlo (Table 1) scores exactly that, and the set may be convexified
@@ -11250,9 +11038,11 @@ end
 *   benchmark (FD, T=6, 24 lag instruments, 46-point grid, R=300-400)
 *   accepts gamma0 in 94-96% of samples (kappa = 0, 1; N = 400, 800), with
 *   hull coverage 97-100% and union-of-segments coverage 85-94%. The wild
-*   threshold bootstrap is therefore kept; citest(#) scores the proved
-*   property directly, and cirefine() is off by default. The same prototype
-*   gives the continuity change of (b): size 1-2% (0.9.35: 3%) and power
+*   threshold bootstrap is therefore kept and citest(#) scores the proved
+*   property directly. A boundary refinement of the set (extra test points
+*   where acceptance changes) was prototyped and dropped: union coverage
+*   91.7 -> 93.0% at three times the CI cost. The same prototype gives the
+*   continuity change of (a): size 1-2% (0.9.35: 3%) and power
 *   45 -> 66% at kappa = 2 and 74 -> 94% at kappa = 3 (N = 400); at kappa = 1
 *   no variant exceeds 15%, since a kink at gamma - kappa/delta3 reproduces
 *   the jump regime above gamma.
