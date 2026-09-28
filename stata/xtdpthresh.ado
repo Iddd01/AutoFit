@@ -49,7 +49,7 @@ program define xtdpthresh, eclass sortpreserve
         SEARCHMAX(integer -1)                       ///
         SEARCHTol(real 1e-8)                        ///
         GRIDCI(integer 100)                         ///
-        CIREFine(integer 3)                         ///
+        CIREFine(integer 0)                         ///
         CITest(numlist max=1 min=1)                 ///
         GRIDType(string)                            ///
         MINREGime(integer 0)                        ///
@@ -11208,10 +11208,10 @@ end
 
 * ---------------------------------------------------------------------------
 * v0.9.36 (28sep2026): threshold-CI coverage and continuity-test power.
-*   (a) Undercoverage of the threshold set. The set was the hull of the
-*   accepted gridci() points. With a well-identified jump the accepted points
-*   are few, the true threshold lies between grid points, and the hull missed
-*   it by discretization alone. New cirefine(#) (default 3, 0 = as 0.9.35):
+*   (a) Optional boundary refinement of the inverted set. The accepted
+*   gridci() points are a finite subset of {gamma : test accepts}; a point
+*   between grid points is never tested. New cirefine(#) (default 0 = as
+*   0.9.35; see (d) for why it is off by default):
 *   each round evaluates up to 10 new points in every gap where acceptance
 *   changes -- for the jump model one support value per regime split, for the
 *   kink model equally spaced points -- with the same statistic and
@@ -11239,6 +11239,23 @@ end
 *   simulation its rejection rate is the size of the test that the set
 *   inverts: near alpha, remaining undercoverage is discretization of the set;
 *   above alpha, the bootstrap itself.
+*   (d) Coverage convention. Gong and Seo (2026, eq. 7 and Theorem 5) define
+*   the set as {gamma in the grid : accepted} and prove
+*   P(gamma0 in set) -> 1 - tau, i.e. acceptance of the test AT gamma0; their
+*   Monte Carlo (Table 1) scores exactly that, and the set may be convexified
+*   (the hull e(gamma_lo), e(gamma_hi)). Scoring coverage by the union of
+*   e(ci_segments) is not a coverage of the inference: a gamma0 between an
+*   accepted and a rejected grid point was never tested and counts as a miss.
+*   An independent prototype of the 0.9.35 wild procedure on the Gong-Seo
+*   benchmark (FD, T=6, 24 lag instruments, 46-point grid, R=300-400)
+*   accepts gamma0 in 94-96% of samples (kappa = 0, 1; N = 400, 800), with
+*   hull coverage 97-100% and union-of-segments coverage 85-94%. The wild
+*   threshold bootstrap is therefore kept; citest(#) scores the proved
+*   property directly, and cirefine() is off by default. The same prototype
+*   gives the continuity change of (b): size 1-2% (0.9.35: 3%) and power
+*   45 -> 66% at kappa = 2 and 74 -> 94% at kappa = 3 (N = 400); at kappa = 1
+*   no variant exceeds 15%, since a kink at gamma - kappa/delta3 reproduces
+*   the jump regime above gamma.
 * ---------------------------------------------------------------------------
 * v0.9.35 (27sep2026): joint variance of the slopes and gamma-hat in the jump
 * model.
