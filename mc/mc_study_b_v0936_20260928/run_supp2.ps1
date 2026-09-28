@@ -42,8 +42,10 @@ function Live-Jobs {
  $jobs=@(Get-Content -LiteralPath $jobsPath -Raw | ConvertFrom-Json)
  return @($jobs | Where-Object {
    $p=Get-Process -Id $_.pid -ErrorAction SilentlyContinue
-   $null -ne $p -and $p.ProcessName -eq 'StataMP-64' -and
-     [Math]::Abs(($p.StartTime.ToUniversalTime()-(Started-Utc $_.started)).TotalSeconds) -lt 2
+   if($null -eq $p -or $p.ProcessName -ne 'StataMP-64'){return $false}
+   # a live Stata with this PID whose start time cannot be read counts as live
+   try {[Math]::Abs(($p.StartTime.ToUniversalTime()-(Started-Utc $_.started)).TotalSeconds) -lt 2}
+   catch {$true}
  })
 }
 if($Action -eq 'Fresh') {
