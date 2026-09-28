@@ -50,6 +50,7 @@ program define xtdpthresh, eclass sortpreserve
         SEARCHTol(real 1e-8)                        ///
         GRIDCI(integer 100)                         ///
         CIREFine(integer 3)                         ///
+        CITest(numlist max=1 min=1)                 ///
         GRIDType(string)                            ///
         MINREGime(integer 0)                        ///
         GRIDSample(string)                          ///
@@ -364,6 +365,13 @@ program define xtdpthresh, eclass sortpreserve
     // threshold set (0 = the gridci() points only, as up to 0.9.35)
     if missing(`cirefine') | `cirefine' < 0 | `cirefine' > 10 {
         di as err "option cirefine() must be an integer between 0 and 10"
+        exit 198
+    }
+    // v0.9.36: citest(#) runs the grid-bootstrap test of H0: gamma = # alone
+    // (a diagnostic: its rejection rate at the true threshold separates the
+    // size of the test from the discretization of the confidence set)
+    if "`citest'" != "" & !`_will_boot' {
+        di as err "citest() requires the grid bootstrap (remove noboot)"
         exit 198
     }
     if `_will_boot' & `gridci' < 100 & "`nowarn'" == "" {
@@ -1476,6 +1484,13 @@ program define xtdpthresh, eclass sortpreserve
     cap matrix `ci_seg_m' = r(xdpt2_ci_segments)
     local ci_unres = r(xdpt2_ci_unres)
     local ci_ref_add = r(xdpt2_ci_ref_add)
+    tempname citest_m
+    local _has_citest 0
+    cap matrix `citest_m' = r(xdpt2_citest)
+    if !_rc {
+        if colsof(`citest_m') == 7 local _has_citest 1
+    }
+    local seed_citest = r(xdpt2_seed_citest)
     // v0.8.2 R11 (#7): grid/floor reproducibility metadata
     local minreg_def = r(xdpt2_minreg_def)
     local minreg_app = r(xdpt2_minreg_app)
@@ -1765,6 +1780,22 @@ program define xtdpthresh, eclass sortpreserve
             else {
                 di as text "   Continuity (H0: kink)    p = " as res %6.4f `pval_cont'
             }
+        }
+    }
+    // v0.9.36: pointwise threshold test of citest(#)
+    if `_has_citest' {
+        local _ct_st = `citest_m'[1, 6]
+        if inlist(`_ct_st', 1, 2) {
+            di as text "   Threshold test (H0: γ = " as res %9.0g `citest_m'[1, 1] ///
+               as text ")  D = " as res %7.3f `citest_m'[1, 2] ///
+               as text "  p = " as res %6.4f `citest_m'[1, 7] ///
+               as text "  " cond(`citest_m'[1, 4] == 1, "accept", "reject") ///
+               as text " at " as res "`level'%"
+        }
+        else {
+            di as text "   Threshold test (H0: γ = " as res %9.0g `citest_m'[1, 1] ///
+               as text ") not evaluated (status " as res `_ct_st' ///
+               as text "; 3 = not admissible, 4-6 = unresolved)"
         }
     }
     // v0.9.10 R28: gamma-hat is grid-SELECTED and can be irregular under
@@ -2369,6 +2400,17 @@ program define xtdpthresh, eclass sortpreserve
     // v0.9.36: boundary refinement of the inverted set
     ereturn scalar cirefine = `cirefine'
     ereturn scalar ci_refine_added = `ci_ref_add'
+    // v0.9.36: citest(#) -- the pointwise grid-bootstrap test at gamma = #
+    if `_has_citest' {
+        ereturn scalar citest_gamma  = `citest_m'[1, 1]
+        ereturn scalar citest_D      = `citest_m'[1, 2]
+        ereturn scalar citest_crit   = `citest_m'[1, 3]
+        ereturn scalar citest_accept = `citest_m'[1, 4]
+        ereturn scalar citest_draws  = `citest_m'[1, 5]
+        ereturn scalar citest_status = `citest_m'[1, 6]
+        ereturn scalar citest_p      = `citest_m'[1, 7]
+        ereturn scalar seed_citest   = `seed_citest'
+    }
     // v0.9.3 R19 (#8): the confidence SET, not just its hull
     // v0.9.3 hotfix: -matrix X = r(name)- with a nonexistent r() matrix
     // silently creates a 1x1 missing matrix (the scalar-expression reading;
@@ -6922,7 +6964,8 @@ void xdpt2_grid_bootstrap(struct xdpt2_unit rowvector units,
                            real matrix ci_tab, real matrix ci_seg,
                            real scalar ci_unres,
                            struct xdpt2_stack_tpl scalar tpl_main,
-                           real scalar tpl_main_st)
+                           real scalar tpl_main_st,
+                           | real colvector D_out)
 {
     real scalar n_ci, l, b, ok_r, obj_r, D_sample, D_boot, crit, min_obj_b
     real scalar has_alt_b
@@ -7539,6 +7582,9 @@ void xdpt2_grid_bootstrap(struct xdpt2_unit rowvector units,
         ci_tab[l, 4] = accept[l]
         ci_tab[l, 5] = n_valid_b
         ci_tab[l, 6] = 1
+        // v0.9.36: the bootstrap statistics of the (last) point, for the
+        // p-value of citest()
+        if (args() == 32) D_out = D_vec
 
         if (xdpt_verbose) {
             printf("    γ_ℓ=%6.4f  D_n=%7.3f  crit=%7.3f  %s\n",
@@ -9301,6 +9347,11 @@ void xtdpthresh_run(string scalar depvar_name,
     // v0.9.36: points added by the boundary refinement (missing: no CI)
     real scalar cref_added
     cref_added = .
+    // v0.9.36: citest(#) result (gamma, D, crit, accept, draws, status, p)
+    real matrix cit_row
+    real scalar seed_citest
+    cit_row = J(0, 7, .)
+    seed_citest = .
     gam_hi = .
     pval_lin = .
     pval_cont = .
@@ -9501,6 +9552,40 @@ void xtdpthresh_run(string scalar depvar_name,
         }
         if (xdpt_verbose & bci_B > 0) {
             printf("  Coef bootstrap: B_eff = %g draws\n", bci_B)
+        }
+
+        // v0.9.36: citest(#), the grid-bootstrap test of H0: gamma = # with
+        // the statistic, bootstrap and weight of the confidence set. Run
+        // last, with its own component seed, so every other result is
+        // unchanged by it. p = (1 + #{D* >= D}) / (1 + B), the add-one rule
+        // whose "p > alpha" is exactly the set's "D <= crit".
+        real scalar cit_g, cit_un, cit_mb
+        real scalar cit_lo, cit_hi, cit_emp, cit_ns, cit_ad, cit_gl, cit_gh
+        real matrix cit_tab, cit_seg
+        real colvector cit_D
+        cit_g = strtoreal(st_local("citest"))
+        if (cit_g < .) {
+            seed_citest = xdpt2_component_seed(477377)
+            cit_mb = .
+            cit_D = J(0, 1, .)
+            xdpt2_grid_bootstrap(units, cache_main, gamma_grid, (cit_g),
+                                  q_eff, minreg_user,
+                                  ci_gmin, best_gamma,
+                                  method, flag_static, flag_kink,
+                                  t_min, t_max, n_boot, alpha,
+                                  cit_lo, cit_hi, cit_emp, cit_ns,
+                                  cit_ad, cit_gl, cit_gh,
+                                  best_twostep, best_A, resid_hat_v, cit_mb,
+                                  cit_tab, cit_seg, cit_un,
+                                  tpl_main, tpl_main_st, cit_D)
+            if (rows(cit_tab) == 1) {
+                cit_row = (cit_tab, .)
+                if (cit_tab[1, 6] == 2) cit_row[1, 7] = 1
+                else if (cit_tab[1, 6] == 1 & rows(cit_D) > 0) {
+                    cit_row[1, 7] = (1 + sum((cit_D :< .) :& (cit_D :>= cit_tab[1, 2]))) /
+                                    (1 + sum(cit_D :< .))
+                }
+            }
         }
     }
 
@@ -9906,6 +9991,8 @@ void xtdpthresh_run(string scalar depvar_name,
     if (rows(ci_seg_r) > 0) st_matrix("r(xdpt2_ci_segments)", ci_seg_r)
     st_numscalar("r(xdpt2_ci_unres)", ci_unres_r)
     st_numscalar("r(xdpt2_ci_ref_add)", cref_added)
+    if (rows(cit_row) == 1) st_matrix("r(xdpt2_citest)", cit_row)
+    st_numscalar("r(xdpt2_seed_citest)", seed_citest)
     st_numscalar("r(xdpt2_ci_empty)", ci_empty)
     st_numscalar("r(xdpt2_ci_nseg)",  ci_nseg)
     st_numscalar("r(xdpt2_pval_lin)", pval_lin)
@@ -11143,6 +11230,15 @@ end
 *   the fixed second-step weight W2 of the jump fit (the criterion of the
 *   reported estimator, as the threshold CI since 0.9.34) instead of the
 *   one-step weight; after a one-step fallback W1 is kept.
+*   (c) New diagnostic citest(#): the grid-bootstrap test of H0: gamma = #
+*   alone, with the statistic, bootstrap and weight of the confidence set,
+*   run last under its own component seed (other results unchanged). Returns
+*   e(citest_D), e(citest_crit), e(citest_accept), e(citest_p) (add-one
+*   bootstrap p-value; p > alpha iff accepted), e(citest_status) (status
+*   code of e(ci_grid)) and e(citest_draws). At the true threshold of a
+*   simulation its rejection rate is the size of the test that the set
+*   inverts: near alpha, remaining undercoverage is discretization of the set;
+*   above alpha, the bootstrap itself.
 * ---------------------------------------------------------------------------
 * v0.9.35 (27sep2026): joint variance of the slopes and gamma-hat in the jump
 * model.
