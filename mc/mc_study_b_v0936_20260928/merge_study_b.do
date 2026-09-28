@@ -241,7 +241,7 @@ foreach f of local files {
         cbcov_consd cbcov_qd cbcov_Lagyd cbcov_xd rhoy_true bx_true ///
         bq_true rhoq rhoeu_effective sige sigeta tburn maxlag_lo maxlag_hi ///
         trim history gridtype gridsample level vce elapsed_s ///
-    joint_vce ar_joint vce_applied bwscale gamma_bw q_nvals_bw N_iv_dep N_iv_dep_near iv_dep_res ar1_cond ar2_cond ar1_p_cond ar2_p_cond se_cond_Lagyb se_cond_qb se_cond_consd se_cond_qd se_cond_Lagyd se_delivered ci_criterion_code citest_requested citest_returned citest_evaluable citest_gamma citest_accept citest_p citest_D citest_crit citest_status citest_draws seed_citest gammahat_in_set
+    joint_vce ar_joint vce_applied bwscale gamma_bw q_nvals_bw N_iv_dep N_iv_dep_near iv_dep_res ar1_cond ar2_cond ar1_p_cond ar2_p_cond se_cond_Lagyb se_cond_qb se_cond_consd se_cond_qd se_cond_Lagyd se_delivered ci_criterion_code citest_requested citest_returned citest_evaluable citest_gamma citest_accept citest_p citest_D citest_crit citest_status citest_draws seed_citest gamma_lo gamma_hi hull_covered hull_length gammahat_in_set
     * A /// continuation keeps the continuation line's leading blanks inside the
     * macro, so the literal EXPECT_VARS text carries runs of spaces while -unab-
     * always returns single-spaced names.  Without retokenize the exact string
@@ -588,6 +588,21 @@ capture assert ci_delivered == 0 | ///
      !missing(set_length) & set_length >= 0)
 if _rc {
     di as err "merge_study_b: delivered-CI fields are internally inconsistent"
+    exit 459
+}
+* v0936: the reported interval [e(gamma_lo), e(gamma_hi)] (convex hull of the
+* accepted grid points). It exists exactly when the inversion is delivered,
+* contains every accepted segment, and so covers whenever a segment does.
+capture assert (ci_delivered == 1 & !missing(gamma_lo, gamma_hi, hull_length) & ///
+        gamma_lo <= gamma_hi & abs(hull_length-(gamma_hi-gamma_lo)) <= 1e-12 & ///
+        hull_length >= set_length - 1e-12 & ///
+        (missing(gamma0) | hull_covered == (gamma_lo <= gamma0 & gamma0 <= gamma_hi)) & ///
+        (!missing(gamma0) | missing(hull_covered)) & ///
+        (covered != 1 | hull_covered == 1)) | ///
+    (ci_delivered != 1 & missing(gamma_lo) & missing(gamma_hi) & ///
+        missing(hull_covered) & missing(hull_length))
+if _rc {
+    di as err "merge_study_b: reported-interval (hull) fields are inconsistent"
     exit 459
 }
 quietly count if contract_ok == 1 & ci_requested == 1 & ///
@@ -1278,6 +1293,16 @@ gen byte ci_disconnected_obs = (n_seg > 1) if ci_del_i
 gen byte ci_boundary_obs = (boundary_warn > 0) if ci_sreq_i & ///
     !missing(boundary_warn)
 gen double ci_len_obs = set_length if ci_del_i
+* v0936: coverage and length of the reported interval (hull), on the same
+* delivered/two-step/effective denominators as the segment-based columns.
+gen byte hull_cov_obs = hull_covered if ci_del_i & !missing(gamma0, hull_covered)
+gen byte hull_cov_hit = (hull_cov_obs == 1) if !missing(hull_cov_obs)
+gen byte hull_cov_2s_obs = hull_covered if target_ci & ok_twostep & ///
+    ci_delivered == 1 & !missing(gamma0, hull_covered)
+gen byte hull_cov_2s_hit = (hull_cov_2s_obs == 1) if !missing(hull_cov_2s_obs)
+gen byte hull_eff_hit = (ok & ci_delivered == 1 & hull_covered == 1) ///
+    if ci_eff_req == 1
+gen double hull_len_obs = hull_length if ci_del_i
 gen byte citest_req_i = target_citest
 gen byte citest_sreq_i = (target_citest & ok)
 gen byte citest_ret_i = (target_citest & ok & citest_returned==1)
@@ -1391,6 +1416,7 @@ local XMEAN `XMEAN' joint_rate=x_joint ar_joint_rate=x_ar_joint ///
 collapse ///
  (count) `XCNT' n_rep=rep n_gamma=err_gamma n_ci_cov=ci_cov_obs ///
     n_ci_cov_2s=ci_cov_2s_obs ///
+    n_hull_cov=hull_cov_obs n_hull_cov_2s=hull_cov_2s_obs ///
     n_citest_cov=citest_acc_obs n_citest_cov_2s=citest_acc_2s_obs ///
     n_ci_inc_eval=ci_inc_obs n_ci_empty_eval=ci_empty_obs ///
     n_ci_disc_eval=ci_disconnected_obs n_ci_bound_eval=ci_boundary_obs ///
@@ -1409,6 +1435,8 @@ collapse ///
     n_ci_del=ci_del_i n_ci_hit=ci_cov_hit n_ci_eff_req=ci_eff_req ///
     n_ci_hit_2s=ci_cov_2s_hit n_ci_eff_hit=ci_eff_hit ///
     n_ci_eff_2s_hit=ci_eff_2s_hit ///
+    n_hull_hit=hull_cov_hit n_hull_hit_2s=hull_cov_2s_hit ///
+    n_hull_eff_hit=hull_eff_hit ///
     n_citest_req=citest_req_i n_citest_sreq=citest_sreq_i ///
     n_citest_returned=citest_ret_i n_citest_eval=citest_eval_i ///
     n_citest_eval_2s=citest_eval_2s_i n_citest_hit=citest_acc_hit ///
@@ -1442,6 +1470,7 @@ collapse ///
  (mean) `XMEAN' ci_incomplete_rate=ci_inc_obs ci_empty_rate=ci_empty_obs ///
     ci_disconnected_rate=ci_disconnected_obs ///
     ci_boundary_rate=ci_boundary_obs mean_set_length=ci_len_obs ///
+    mean_hull_length=hull_len_obs ///
     mean_lin_valid=lin_valid_draws ///
     mean_cont_valid=cont_valid_draws mean_hansen_p=hansen_p ///
     citest_unresolved_rate=citest_unresolved_obs mean_citest_p=citest_p ///
@@ -1474,11 +1503,16 @@ collapse ///
     boot_cov_consd=bcov_consd boot_cov_qd=bcov_qd ///
     boot_cov_lagyd=bcov_lagyd boot_cov_xd=bcov_xd ///
     hansen_reject5=hansen_rej ar1_reject5=ar1_rej ar2_reject5=ar2_rej ///
- (sd) `XSD' sd_set_length=ci_len_obs ///
- (p50) median_set_length=ci_len_obs ///
- (p95) p95_set_length=ci_len_obs, ///
+ (sd) `XSD' sd_set_length=ci_len_obs sd_hull_length=hull_len_obs ///
+ (p50) median_set_length=ci_len_obs median_hull_length=hull_len_obs ///
+ (p95) p95_set_length=ci_len_obs p95_hull_length=hull_len_obs, ///
     by(`BY')
 
+capture assert n_hull_cov == n_ci_cov & n_hull_cov_2s == n_ci_cov_2s
+if _rc {
+    di as err "merge_study_b: hull and segment coverage denominators differ"
+    exit 459
+}
 capture assert n_ci_cov == n_ci_del & n_ci_cov_2s == n_ci_del_2s & ///
     n_ci_inc_eval == n_ci_sreq & n_ci_bound_eval == n_ci_sreq & ///
     n_ci_disc_eval == n_ci_del
@@ -1512,6 +1546,20 @@ foreach z in ci lin cont {
     gen double `z'_delivery_twostep_mcse=sqrt(`z'_delivery_twostep* ///
         (1-`z'_delivery_twostep)/n_`z'_sreq_2s)
 }
+* v0936: ci_coverage (and its twostep/effective variants) scores gamma0 in
+* the union of e(ci_segments), the accepted grid runs. A gamma0 between an
+* accepted and a rejected grid point is never tested there, so this is a grid
+* diagnostic, not the coverage of the inference. Primary: citest_coverage
+* (the event of Gong-Seo 2026, Theorem 5); reported interval: hull_coverage.
+gen double hull_coverage=n_hull_hit/n_hull_cov
+gen double hull_coverage_mcse=sqrt(hull_coverage*(1-hull_coverage)/n_hull_cov)
+gen double hull_coverage_twostep=n_hull_hit_2s/n_hull_cov_2s
+gen double hull_coverage_twostep_mcse=sqrt(hull_coverage_twostep* ///
+    (1-hull_coverage_twostep)/n_hull_cov_2s)
+gen double hull_effective_coverage=n_hull_eff_hit/n_ci_eff_req
+gen double hull_effective_coverage_mcse=sqrt(hull_effective_coverage* ///
+    (1-hull_effective_coverage)/n_ci_eff_req)
+gen double mean_hull_length_mcse=sd_hull_length/sqrt(n_ci_del)
 gen double ci_coverage=n_ci_hit/n_ci_cov
 gen double ci_coverage_mcse=sqrt(ci_coverage*(1-ci_coverage)/n_ci_cov)
 gen double ci_coverage_twostep=n_ci_hit_2s/n_ci_cov_2s
@@ -1597,6 +1645,11 @@ order `BY' target_ci target_citest target_lin target_cont n_rep n_contract contr
     n_citest_returned n_citest_eval citest_delivery citest_delivery_mcse ///
     n_citest_cov n_citest_hit citest_coverage citest_coverage_mcse ///
     citest_effective_coverage citest_eff_coverage_mcse ///
+    n_hull_cov n_hull_hit hull_coverage hull_coverage_mcse ///
+    hull_coverage_twostep hull_coverage_twostep_mcse ///
+    n_hull_eff_hit hull_effective_coverage hull_effective_coverage_mcse ///
+    mean_hull_length mean_hull_length_mcse median_hull_length ///
+    p95_hull_length ///
     gscal_benchmark_coverage gscal_benchmark_mcse ///
     gscal_diff_citest gscal_diff_citest_effective ///
     gscal_diff_effective gscal_diff_cond ///

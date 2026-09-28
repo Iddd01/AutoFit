@@ -313,7 +313,7 @@ local OUT "`OUTSTEM'_SH`SHARD'.csv"
 capture confirm file "`OUT'"
 local newfile = _rc
 
-local EXPECT_HEADER "run_id,harness_version,schema_version,code_version_expected,code_version_actual,stata_version,rng_kind,rng_actual,seed_scheme,dgp_spec,has_x,infmode,cell_id,pair_id,pairmode,config_key,full_key,study,design,method,N,T,miss,missp,qstatus,boottype,coefboot,kappa,R,B,grid,gridci,refine,master,shard,nshard,rep,dgp_seed,missing_seed,boot_seed,seed_threshold,seed_linearity,seed_continuity,seed_coefficient,rc,fit_rc0,cmd_ok,version_ok,contract_ok,success,estimator_twostep,gamma0,gamma_hat,g_bias,g_sqerr,obj,Lagyb,xb,qb,consd,qd,Lagyd,xd,b_Lagyb,b_xb,b_qb,b_consd,b_qd,b_Lagyd,b_xd,se_Lagyb,se_xb,se_qb,se_consd,se_qd,se_Lagyd,se_xd,ci_requested,ci_delivered,ci_incomplete,ci_empty,n_seg,boundary_warn,covered,set_length,lin_requested,lin_requested_B,lin_valid_draws,lin_delivered,p_lin,lin_reject5_cond,lin_reject5_uncond,cont_requested,cont_requested_B,cont_valid_draws,cont_delivered,p_cont,cont_reject5_cond,cont_reject5_uncond,hansen_p,ar1_p,ar2_p,N_used,N_trans,N_iv,N_units,refine_complete,refine_iterations,refine_added,refine_remaining,refine_neigh_unevaluated,searchmode,searchtol,search_converged,search_incomplete,search_hit_max,search_W2_builds,search_stage1_level,search_stage2_level,search_stage1_points,search_stage2_points,search_stage1_same_split,search_stage2_same_split,search_stage1_rel_gain,search_stage2_rel_gain,grid_max_requested,grid_requested,grid_effective,grid_admitted,grid_structural,grid_twostep_admitted,gridci_requested,gridci_effective,gridci_admitted,gridci_evaluated,ci_unresolved,gridboot_min_draws,threshold_requested_B,continuity_common_grid,ci_bootstrap_certified,units_target,units_realized,units_dropped,analysis_potential,analysis_observed,missing_n,missing_rate,gap_events,gap_periods,fd_pair_rows_potential,fod_rows_potential,cb_requested,cb_delivered,cbcov_Lagyb,cbcov_xb,cbcov_qb,cbcov_consd,cbcov_qd,cbcov_Lagyd,cbcov_xd,rhoy_true,bx_true,bq_true,rhoq,rhoeu_effective,sige,sigeta,tburn,maxlag_lo,maxlag_hi,trim,history,gridtype,gridsample,level,vce,elapsed_s,joint_vce,ar_joint,vce_applied,bwscale,gamma_bw,q_nvals_bw,N_iv_dep,N_iv_dep_near,iv_dep_res,ar1_cond,ar2_cond,ar1_p_cond,ar2_p_cond,se_cond_Lagyb,se_cond_qb,se_cond_consd,se_cond_qd,se_cond_Lagyd,se_delivered,ci_criterion_code,citest_requested,citest_returned,citest_evaluable,citest_gamma,citest_accept,citest_p,citest_D,citest_crit,citest_status,citest_draws,seed_citest,gammahat_in_set"
+local EXPECT_HEADER "run_id,harness_version,schema_version,code_version_expected,code_version_actual,stata_version,rng_kind,rng_actual,seed_scheme,dgp_spec,has_x,infmode,cell_id,pair_id,pairmode,config_key,full_key,study,design,method,N,T,miss,missp,qstatus,boottype,coefboot,kappa,R,B,grid,gridci,refine,master,shard,nshard,rep,dgp_seed,missing_seed,boot_seed,seed_threshold,seed_linearity,seed_continuity,seed_coefficient,rc,fit_rc0,cmd_ok,version_ok,contract_ok,success,estimator_twostep,gamma0,gamma_hat,g_bias,g_sqerr,obj,Lagyb,xb,qb,consd,qd,Lagyd,xd,b_Lagyb,b_xb,b_qb,b_consd,b_qd,b_Lagyd,b_xd,se_Lagyb,se_xb,se_qb,se_consd,se_qd,se_Lagyd,se_xd,ci_requested,ci_delivered,ci_incomplete,ci_empty,n_seg,boundary_warn,covered,set_length,lin_requested,lin_requested_B,lin_valid_draws,lin_delivered,p_lin,lin_reject5_cond,lin_reject5_uncond,cont_requested,cont_requested_B,cont_valid_draws,cont_delivered,p_cont,cont_reject5_cond,cont_reject5_uncond,hansen_p,ar1_p,ar2_p,N_used,N_trans,N_iv,N_units,refine_complete,refine_iterations,refine_added,refine_remaining,refine_neigh_unevaluated,searchmode,searchtol,search_converged,search_incomplete,search_hit_max,search_W2_builds,search_stage1_level,search_stage2_level,search_stage1_points,search_stage2_points,search_stage1_same_split,search_stage2_same_split,search_stage1_rel_gain,search_stage2_rel_gain,grid_max_requested,grid_requested,grid_effective,grid_admitted,grid_structural,grid_twostep_admitted,gridci_requested,gridci_effective,gridci_admitted,gridci_evaluated,ci_unresolved,gridboot_min_draws,threshold_requested_B,continuity_common_grid,ci_bootstrap_certified,units_target,units_realized,units_dropped,analysis_potential,analysis_observed,missing_n,missing_rate,gap_events,gap_periods,fd_pair_rows_potential,fod_rows_potential,cb_requested,cb_delivered,cbcov_Lagyb,cbcov_xb,cbcov_qb,cbcov_consd,cbcov_qd,cbcov_Lagyd,cbcov_xd,rhoy_true,bx_true,bq_true,rhoq,rhoeu_effective,sige,sigeta,tburn,maxlag_lo,maxlag_hi,trim,history,gridtype,gridsample,level,vce,elapsed_s,joint_vce,ar_joint,vce_applied,bwscale,gamma_bw,q_nvals_bw,N_iv_dep,N_iv_dep_near,iv_dep_res,ar1_cond,ar2_cond,ar1_p_cond,ar2_p_cond,se_cond_Lagyb,se_cond_qb,se_cond_consd,se_cond_qd,se_cond_Lagyd,se_delivered,ci_criterion_code,citest_requested,citest_returned,citest_evaluable,citest_gamma,citest_accept,citest_p,citest_D,citest_crit,citest_status,citest_draws,seed_citest,gamma_lo,gamma_hi,hull_covered,hull_length,gammahat_in_set"
 local EXPECT_COMMAS = length("`EXPECT_HEADER'") - ///
     length(subinstr("`EXPECT_HEADER'", ",", "", .))
 
@@ -554,6 +554,19 @@ if !`newfile' {
              fd_pair_rows_potential < 0 | fod_rows_potential < 0)
         if r(N) {
             di as err "study_b_worker: completed row has invalid seed/outcome/accounting semantics"
+            exit 459
+        }
+
+        * v0936: reported-interval (hull) columns
+        quietly count if cell_id == "`CELL_ID'" & ///
+            ((ci_delivered == 1 & (missing(gamma_lo,gamma_hi) | ///
+                gamma_lo > gamma_hi | abs(hull_length-(gamma_hi-gamma_lo)) > 1e-12 | ///
+                (!missing(gamma0) & hull_covered != (gamma_lo <= gamma0 & gamma0 <= gamma_hi)) | ///
+                (missing(gamma0) & !missing(hull_covered)) | ///
+                (covered == 1 & hull_covered != 1))) | ///
+             (ci_delivered != 1 & !missing(gamma_lo,gamma_hi,hull_covered,hull_length)))
+        if r(N) {
+            di as err "study_b_worker: completed row has inconsistent hull columns"
             exit 459
         }
 
@@ -882,7 +895,7 @@ forvalues rep = `REP_START'/`REP_END' {
                  thr_req cont_common ci_cert ///
                  lin_valid cont_valid eseed_thr eseed_lin eseed_cont eseed_coef ///
                  citest_gamma citest_accept citest_p citest_D citest_crit ///
-                 citest_status citest_draws seed_citest {
+                 citest_status citest_draws seed_citest glo ghi hcov hlen {
         local `v' = .
     }
     local code_actual NA
@@ -1147,6 +1160,30 @@ forvalues rep = `REP_START'/`REP_END' {
                     local slen = .
                 }
                 if missing(`GAMMA0') local cov = .
+                * v0936: the reported interval [e(gamma_lo), e(gamma_hi)], the
+                * convex hull of the accepted grid points (Gong-Seo: the set
+                * "can be convexified"). It spans the first to the last
+                * segment and contains every segment, so a segment hit is a
+                * hull hit.
+                if `deliv' {
+                    local glo = e(gamma_lo)
+                    local ghi = e(gamma_hi)
+                    capture assert !missing(`glo',`ghi') & `glo' <= `ghi' & ///
+                        reldif(`glo', _cis[1,1]) <= 1e-12 & ///
+                        reldif(`ghi', _cis[`nr',2]) <= 1e-12
+                    if _rc {
+                        di as err "study_b_worker: e(gamma_lo)/e(gamma_hi) disagree with e(ci_segments)"
+                        exit 459
+                    }
+                    local hlen = `ghi' - `glo'
+                    if !missing(`GAMMA0') {
+                        local hcov = (`glo' <= `GAMMA0' & `GAMMA0' <= `ghi')
+                        if `cov' == 1 & `hcov' != 1 {
+                            di as err "study_b_worker: segment hit outside the hull"
+                            exit 459
+                        }
+                    }
+                }
             }
         }
         if !missing(`pl') {
@@ -1285,7 +1322,7 @@ forvalues rep = `REP_START'/`REP_END' {
         "`N',`units_realized',`units_dropped',`analysis_potential',`analysis_observed',`missing_n',`missing_rate'," ///
         "`gap_events',`gap_periods',`fd_pair_rows_potential',`fod_rows_potential'," ///
         "`cb_requested',`cb_deliv',`cbcov_Lagyb',`cbcov_xb',`cbcov_qb',`cbcov_consd',`cbcov_qd',`cbcov_Lagyd',`cbcov_xd'," ///
-        "`RHOY',`T_xb',`BQ',`RHOQ',`RHOEU',`SIGE',`SIGETA',`TBURN',`MAXLAG_LO',`MAXLAG_HI',`TRIM',panel,`GRIDTYPE',`GRIDSAMPLE',95,robust,`el',`joint_vce',`ar_joint',`vce_applied',`bwscale',`gamma_bw',`q_nvals_bw',`N_iv_dep',`N_iv_dep_near',`iv_dep_res',`ar1_cond',`ar2_cond',`ar1_p_cond',`ar2_p_cond',`se_cond_Lagyb',`se_cond_qb',`se_cond_consd',`se_cond_qd',`se_cond_Lagyd',`se_delivered',`ci_criterion_code',`citest_requested',`citest_returned',`citest_evaluable',`citest_gamma',`citest_accept',`citest_p',`citest_D',`citest_crit',`citest_status',`citest_draws',`seed_citest',`gammahat_in_set'" _n
+        "`RHOY',`T_xb',`BQ',`RHOQ',`RHOEU',`SIGE',`SIGETA',`TBURN',`MAXLAG_LO',`MAXLAG_HI',`TRIM',panel,`GRIDTYPE',`GRIDSAMPLE',95,robust,`el',`joint_vce',`ar_joint',`vce_applied',`bwscale',`gamma_bw',`q_nvals_bw',`N_iv_dep',`N_iv_dep_near',`iv_dep_res',`ar1_cond',`ar2_cond',`ar1_p_cond',`ar2_p_cond',`se_cond_Lagyb',`se_cond_qb',`se_cond_consd',`se_cond_qd',`se_cond_Lagyd',`se_delivered',`ci_criterion_code',`citest_requested',`citest_returned',`citest_evaluable',`citest_gamma',`citest_accept',`citest_p',`citest_D',`citest_crit',`citest_status',`citest_draws',`seed_citest',`glo',`ghi',`hcov',`hlen',`gammahat_in_set'" _n
     file close `FH'
 
     if mod(`rep', 25) == 0 di as txt "  [`STUDY'/`DESIGN'/`METHOD'/N`N'/`MISS'`MISSP'/`QSTATUS'] rep `rep' g=`gh' cov=`cov' deliv=`deliv'"

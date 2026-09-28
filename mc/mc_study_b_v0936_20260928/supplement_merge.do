@@ -24,7 +24,7 @@ local first=1
 local nshards=${supp_nshard}
 forvalues sh=1/`nshards' {
     import delimited using "supplement_SH`sh'.csv", clear case(preserve) stringcols(_all)
-    local expected run_id study cell_id pair_id method spec vce N T missp R B grid gridci master shard rep dgp_seed missing_seed boot_seed rc success twostep joint_vce vce_applied ar_joint gamma bwscale gamma_bw b_rho b_q b_delta b_cons b_lagd se_rho se_q se_delta se_cons se_lagd sc_rho sc_q sc_delta sc_cons sc_lagd ar2_p ar2_p_cond N_iv N_iv_dep_near ci_delivered ci_covered ci_length ci_nseg ci_boundary ci_incomplete ci_valid ci_criterion gammahat_in_set citest_gamma citest_accept citest_p citest_D citest_crit citest_status citest_draws seed_citest elapsed_s
+    local expected run_id study cell_id pair_id method spec vce N T missp R B grid gridci master shard rep dgp_seed missing_seed boot_seed rc success twostep joint_vce vce_applied ar_joint gamma bwscale gamma_bw b_rho b_q b_delta b_cons b_lagd se_rho se_q se_delta se_cons se_lagd sc_rho sc_q sc_delta sc_cons sc_lagd ar2_p ar2_p_cond N_iv N_iv_dep_near ci_delivered ci_covered ci_length ci_nseg ci_boundary ci_incomplete ci_valid ci_criterion gammahat_in_set citest_gamma citest_accept citest_p citest_D citest_crit citest_status citest_draws seed_citest ci_gamma_lo ci_gamma_hi ci_hull_covered ci_hull_length elapsed_s
     unab actual: _all
     assert "`actual'"=="`expected'"
     local strings run_id study pair_id method spec vce
@@ -58,7 +58,8 @@ gen byte mc=cond(missp==0,1,2)
 assert dgp_seed==1+hh
 assert missing_seed==700000001+mod(hh*1009+mc*10007+7919,699999999)
 assert boot_seed==1400000001+mod(hh*1013+mc*10007+B*131+grid*137+gridci*139+271828,699999999)
-assert seed_citest==mod(boot_seed+477377,2147483648) if rc==0
+assert seed_citest==mod(boot_seed+477377,2147483648) if rc==0 & B>0
+assert missing(seed_citest,citest_status) if B==0
 drop hh mc offset
 assert inlist(success,0,1) & inlist(ci_delivered,0,1)
 assert success==0 if rc!=0
@@ -70,7 +71,13 @@ assert ci_valid==B & gammahat_in_set==1 & ci_incomplete==0 if ci_delivered
 assert ci_criterion==cond(twostep==1,2,1) if rc==0 & B>0
 assert ci_length>=0 & !missing(ci_length,ci_covered) if ci_delivered
 assert ci_delivered==0 if B==0
-assert abs(citest_gamma-.25)<=1e-12 & inrange(citest_status,1,6) if rc==0
+* reported interval (hull of the accepted grid points)
+assert !missing(ci_gamma_lo,ci_gamma_hi,ci_hull_covered,ci_hull_length) & ///
+    ci_gamma_lo<=ci_gamma_hi & abs(ci_hull_length-(ci_gamma_hi-ci_gamma_lo))<=1e-12 & ///
+    ci_hull_covered==(ci_gamma_lo<=.25 & .25<=ci_gamma_hi) & ///
+    ci_hull_length>=ci_length-1e-12 & (ci_covered!=1 | ci_hull_covered==1) if ci_delivered
+assert missing(ci_gamma_lo,ci_gamma_hi,ci_hull_covered,ci_hull_length) if !ci_delivered
+assert abs(citest_gamma-.25)<=1e-12 & inrange(citest_status,1,6) if rc==0 & B>0
 assert citest_draws==B & !missing(citest_crit,citest_accept,citest_p,citest_D) & ///
     inlist(citest_accept,0,1) & inrange(citest_p,0,1) & ///
     citest_accept==(citest_D<=citest_crit) & citest_accept==(citest_p>.05) ///
@@ -92,6 +99,9 @@ preserve
     gen byte cov=ci_covered if ci_delivered
     gen byte ceff=ci_delivered & ci_covered==1 if B>0
     gen double clen=ci_length if ci_delivered
+    gen byte hcov=ci_hull_covered if ci_delivered
+    gen byte heff=ci_delivered & ci_hull_covered==1 if B>0
+    gen double hlen=ci_hull_length if ci_delivered
     gen byte cdisc=ci_nseg>1 if ci_delivered
     gen byte citest_evaluable=inlist(citest_status,1,2) if rc==0
     gen byte citest_cov=citest_accept if citest_evaluable
@@ -103,9 +113,10 @@ preserve
         ar_joint_rate=ar_ok ci_delivery_rate=ci_delivered coverage=cov effective_coverage=ceff ///
         citest_delivery=citest_evaluable citest_coverage=citest_cov ///
         citest_effective_coverage=citest_eff mean_citest_p=citest_p ///
+        hull_coverage=hcov hull_effective_coverage=heff mean_hull_length=hlen ///
         mean_length=clen disconnected_rate=cdisc boundary_rate=ci_boundary ///
         incomplete_rate=ci_incomplete elapsed_s ///
-        (sd) sd_gamma=eg sd_sq_gamma=sg sd_length=clen, ///
+        (sd) sd_gamma=eg sd_sq_gamma=sg sd_length=clen sd_hull_length=hlen, ///
         by(run_id study cell_id pair_id method spec vce N T missp R B grid gridci master formal)
     gen double rmse_gamma=sqrt(mse_gamma)
     gen double bias_mcse=sd_gamma/sqrt(n_gamma)
@@ -116,6 +127,13 @@ preserve
         (1-citest_effective_coverage)/n_rep)
     gen double effective_coverage_mcse=sqrt(effective_coverage*(1-effective_coverage)/n_rep)
     gen double length_mcse=sd_length/sqrt(n_ci)
+    * coverage/effective_coverage/mean_length score the union of
+    * e(ci_segments) (grid diagnostic); citest_* is the primary coverage and
+    * hull_* the reported interval [e(gamma_lo), e(gamma_hi)]
+    gen double hull_coverage_mcse=sqrt(hull_coverage*(1-hull_coverage)/n_ci)
+    gen double hull_effective_coverage_mcse=sqrt(hull_effective_coverage* ///
+        (1-hull_effective_coverage)/n_rep)
+    gen double hull_length_mcse=sd_hull_length/sqrt(n_ci)
     export delimited using supplement_summary.csv, replace
 restore
 keep run_id study cell_id pair_id method spec vce N T missp R B grid gridci master formal rep ///

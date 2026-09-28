@@ -28,6 +28,14 @@ recalculation of `citest()`, seed isolation, FD/FOD/kink edge cases, and exact
 - Result: 8/8 rows completed and verified merge passed.
 - `citest()` was evaluable and its component seed was correct in 8/8 rows.
 
+## Post-smoke change (pending re-smoke)
+
+After the smokes above, the core and supplement workers/mergers gained the
+reported-interval columns (`gamma_lo`, `gamma_hi`, `hull_covered`,
+`hull_length`; supplement `ci_*` equivalents) and their summaries, and the
+supplement no longer passes `citest()` when `B=0`. The estimator is unchanged.
+Both smokes must be rerun on this package before any formal run.
+
 Smoke results test execution, schema, accounting, seed and merge contracts.
 They are not Monte Carlo performance evidence. Formal results require new runs
 with no smoke overrides.

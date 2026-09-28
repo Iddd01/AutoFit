@@ -10,7 +10,7 @@ adopath ++ "."
 quietly do xtdpthresh.ado
 set rng mt64
 local OUT "supplement_SH`SHARD'.csv"
-local HEADER "run_id,study,cell_id,pair_id,method,spec,vce,N,T,missp,R,B,grid,gridci,master,shard,rep,dgp_seed,missing_seed,boot_seed,rc,success,twostep,joint_vce,vce_applied,ar_joint,gamma,bwscale,gamma_bw,b_rho,b_q,b_delta,b_cons,b_lagd,se_rho,se_q,se_delta,se_cons,se_lagd,sc_rho,sc_q,sc_delta,sc_cons,sc_lagd,ar2_p,ar2_p_cond,N_iv,N_iv_dep_near,ci_delivered,ci_covered,ci_length,ci_nseg,ci_boundary,ci_incomplete,ci_valid,ci_criterion,gammahat_in_set,citest_gamma,citest_accept,citest_p,citest_D,citest_crit,citest_status,citest_draws,seed_citest,elapsed_s"
+local HEADER "run_id,study,cell_id,pair_id,method,spec,vce,N,T,missp,R,B,grid,gridci,master,shard,rep,dgp_seed,missing_seed,boot_seed,rc,success,twostep,joint_vce,vce_applied,ar_joint,gamma,bwscale,gamma_bw,b_rho,b_q,b_delta,b_cons,b_lagd,se_rho,se_q,se_delta,se_cons,se_lagd,sc_rho,sc_q,sc_delta,sc_cons,sc_lagd,ar2_p,ar2_p_cond,N_iv,N_iv_dep_near,ci_delivered,ci_covered,ci_length,ci_nseg,ci_boundary,ci_incomplete,ci_valid,ci_criterion,gammahat_in_set,citest_gamma,citest_accept,citest_p,citest_D,citest_crit,citest_status,citest_draws,seed_citest,ci_gamma_lo,ci_gamma_hi,ci_hull_covered,ci_hull_length,elapsed_s"
 local done
 capture confirm file "`OUT'"
 if !_rc {
@@ -97,9 +97,12 @@ forvalues j=1/`ncells' {
         if "`spec'"=="kink" local modelopt "kink"
         local infopt "noboot"
         if `B'>0 local infopt "boot(`B') gridci(`gridci') boottype(wild) rseed(`boot_seed') notest"
+        * citest() requires the grid bootstrap: never with noboot
+        local citestopt ""
+        if `B'>0 local citestopt "citest(.25)"
         capture quietly xtdpthresh y, qx(q) predetermined(q) method(`method') ///
             maxlag(1 3) grid(`grid') trim(.15) history(panel) ///
-            `modelopt' `infopt' citest(.25) coefboot(none) ///
+            `modelopt' `infopt' `citestopt' coefboot(none) ///
             vce(`vce') bwscale(1.5) nowarn
         local rc=_rc
         local success=0
@@ -109,7 +112,8 @@ forvalues j=1/`ncells' {
             sc_rho sc_q sc_delta sc_cons sc_lagd ar2_p ar2_p_cond N_iv N_iv_dep_near ///
             ci_covered ci_length ci_nseg ci_boundary ci_incomplete ci_valid ///
             ci_criterion gammahat_in_set citest_gamma citest_accept citest_p ///
-            citest_D citest_crit citest_status citest_draws seed_citest {
+            citest_D citest_crit citest_status citest_draws seed_citest ///
+            ci_gamma_lo ci_gamma_hi ci_hull_covered ci_hull_length {
             local `nm'=.
         }
         if `rc'==0 {
@@ -125,16 +129,21 @@ forvalues j=1/`ncells' {
                 citest_crit citest_status citest_draws seed_citest {
                 capture local `nm'=e(`nm')
             }
+            if `B'==0 {
+                assert missing(`citest_gamma',`citest_status',`seed_citest')
+            }
+            else {
             assert abs(`citest_gamma'-.25)<=1e-12 & ///
                 inrange(`citest_status',1,6) & ///
                 `seed_citest'==mod(`boot_seed'+477377,2147483648)
-            if `citest_status'==1 {
+            }
+            if `B'>0 & `citest_status'==1 {
                 assert `citest_draws'==`B' & !missing(`citest_crit') & ///
                     inlist(`citest_accept',0,1) & inrange(`citest_p',0,1) & ///
                     `citest_accept'==(`citest_D'<=`citest_crit') & ///
                     `citest_accept'==(`citest_p'>.05)
             }
-            else if `citest_status'==2 {
+            else if `B'>0 & `citest_status'==2 {
                 assert `citest_D'==0 & `citest_accept'==1 & `citest_p'==1 & ///
                     missing(`citest_crit',`citest_draws')
             }
@@ -185,6 +194,17 @@ forvalues j=1/`ncells' {
                 if `ci_delivered' {
                     assert `ci_valid'==`B' & `gammahat_in_set'==1
                     assert `ci_criterion'==cond(`twostep'==1,2,1)
+                    * reported interval: hull of the accepted grid points
+                    local ci_gamma_lo=e(gamma_lo)
+                    local ci_gamma_hi=e(gamma_hi)
+                    local nrci=rowsof(CI)
+                    assert !missing(`ci_gamma_lo',`ci_gamma_hi') & ///
+                        `ci_gamma_lo'<=`ci_gamma_hi' & ///
+                        reldif(`ci_gamma_lo',CI[1,1])<=1e-12 & ///
+                        reldif(`ci_gamma_hi',CI[`nrci',2])<=1e-12
+                    local ci_hull_length=`ci_gamma_hi'-`ci_gamma_lo'
+                    local ci_hull_covered=(`ci_gamma_lo'<=.25 & .25<=`ci_gamma_hi')
+                    assert `ci_covered'!=1 | `ci_hull_covered'==1
                 }
             }
         }
@@ -198,7 +218,8 @@ forvalues j=1/`ncells' {
             ci_delivered ci_covered ci_length ci_nseg ci_boundary ci_incomplete ///
             ci_valid ci_criterion gammahat_in_set citest_gamma citest_accept ///
             citest_p citest_D citest_crit citest_status citest_draws ///
-            seed_citest elapsed_s {
+            seed_citest ci_gamma_lo ci_gamma_hi ci_hull_covered ci_hull_length ///
+            elapsed_s {
             local row "`row',``nm''"
         }
         tempname FH

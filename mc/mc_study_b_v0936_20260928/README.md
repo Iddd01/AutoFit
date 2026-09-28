@@ -17,6 +17,16 @@ coverage indicator and checks its status, draw count and independent seed.
 The former union-of-`e(ci_segments)` coverage remains in the outputs as a
 descriptive set-geometry measure, not as the primary Gong–Seo coverage score.
 
+The reported interval `[e(gamma_lo), e(gamma_hi)]` (the convex hull of the
+accepted grid points; Gong–Seo: the set "can be convexified") is recorded per
+row as `gamma_lo`, `gamma_hi`, `hull_covered`, `hull_length` (supplement:
+`ci_gamma_lo`, `ci_gamma_hi`, `ci_hull_covered`, `ci_hull_length`). The
+summaries report `hull_coverage`, its two-step and effective variants, and
+mean/median/p95 hull length with MCSEs, on the same denominators as the
+segment-based columns. Report it as the coverage of the interval users see,
+next to its length and boundary rate. Worker and merger check that the hull
+equals the first/last segment ends and that every segment hit is a hull hit.
+
 The core design is documented in [_DESIGN_B.md](_DESIGN_B.md).
 The targeted blocks and their launcher are in [SUPPLEMENT.md](SUPPLEMENT.md).
 Do not merge supplement rows into the core summaries.
