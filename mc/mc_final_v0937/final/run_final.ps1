@@ -1,5 +1,5 @@
 # Final Monte Carlo (xtdpthresh 0.9.37); PowerShell 5.1 and Stata 17.
-# -Registry picks the cell file (final_point_cells.csv or final_inf_cells.csv);
+# -Registry picks the cell file (final_point_cells.csv, final_inf_cells.csv or final_ss_cells.csv);
 # it is frozen in the run folder as final_cells.csv.
 [CmdletBinding()]
 param(

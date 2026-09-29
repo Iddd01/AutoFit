@@ -1,5 +1,7 @@
 *! Final Monte Carlo worker (xtdpthresh 0.9.37). One shard of a registry
-*! (final_point_cells.csv or final_inf_cells.csv, frozen as final_cells.csv).
+*! (final_point_cells.csv, final_inf_cells.csv or final_ss_cells.csv, frozen
+*! as final_cells.csv). ss_jump/ss_cont: Seo and Shin (2016, eqs. 16-17), no
+*! unit effect, as in their Section 6.
 *! DGP: Gong-Seo (2026) benchmark, as in the checking studies:
 *!   y_it = rho y_i,t-1 + q_it + (kappa - .5 + 2 q_it) 1(q_it > .25) + e_it,
 *!   q_it = .7 q_i,t-1 + u_it, e = .5 e*, u = .5 e*_{t-1} + sqrt(.75) v;
@@ -239,7 +241,7 @@ forvalues j=1/`ncells' {
         * xthenreg can exit with rc 0 without posting: never read stale e()
         ereturn clear
         if "`mode'"=="XTH" {
-            * y, threshold variable q; q enters as a regressor through
+            * non-SS designs: y, threshold variable q; q enters as a regressor through
             * endogenous(q): xthenreg has no predetermined option, and without
             * it q would instrument itself (invalid here, as q_t depends on
             * e_{t-1}); endogenous(q) uses lags from t-2, which are valid
