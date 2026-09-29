@@ -25,7 +25,8 @@ foreach nm of local CELLVARS {
 }
 save `registry'
 local first=1
-forvalues sh=1/${fin_nshard} {
+local nshards=${fin_nshard}
+forvalues sh=1/`nshards' {
     import delimited using "final_SH`sh'.csv", clear case(preserve) varnames(1) stringcols(_all)
     local expected run_id `CELLVARS' master shard rep dgp_seed missing_seed boot_seed units_realized analysis_observed rc version_ok twostep gamma_hat b_rho b_q b_cons b_qd b_rhod se_rho se_q se_cons se_qd se_rhod sc_rho sc_q sc_cons sc_qd sc_rhod joint_vce vce_applied ar_joint hansen_p ar1_p ar2_p N_obs N_iv N_units ci_delivered ci_lo ci_hi ci_nseg ci_boundary ci_incomplete citest_gamma citest_accept citest_p citest_D citest_crit citest_status citest_draws seed_citest p_lin lin_valid elapsed_s
     local expected : subinstr local expected "block pair_id" "block cell_id pair_id"
