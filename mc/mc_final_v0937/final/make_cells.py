@@ -13,16 +13,17 @@ MISS = {"bal": ("balanced", 0), "gap30": ("mcar", .3), "attr15": ("attrition", .
 R = 500
 
 
-def cell(rows, block, dgp, spec, vce, iv, N, T, miss, kappa, c, mode, B, gridci):
+def cell(rows, block, dgp, spec, vce, iv, N, T, miss, kappa, c, mode, B, gridci,
+         methods=("fd", "fod"), gridtype="quantile"):
     m, p = MISS[miss]
     k = "%03d" % round(100 * kappa)
     cc = "%03d" % round(100 * c)
     pair = f"{block}_{dgp}_{spec}_{vce}_{iv}_n{N}_t{T}_{miss}_k{k}_c{cc}"
-    for method in ("fd", "fod"):
+    for method in methods:
         rows.append(dict(block=block, cell_id=0, pair_id=pair, dgp=dgp, spec=spec,
                          method=method, vce=vce, iv=iv, N=N, T=T, miss=m, missp=p,
                          kappa=kappa, c=c, mode=mode, R=R, B=B, grid=46, gridci=gridci,
-                         gridtype="quantile", gridsample="observed", trim=.10, refine=0))
+                         gridtype=gridtype, gridsample="observed", trim=.10, refine=0))
 
 
 def point():
@@ -70,6 +71,10 @@ def inf():
     for k in (0, .5, 1):                             # I5 power, N = 800 balanced
         for c in (.1, .25, .5):
             cell(r, "I5", "base", "jump", "robust", "all", 800, 6, "bal", k, c, "CI", 500, 10)
+    for N in (400, 800):                             # X1 Seo-Shin via xthenreg
+        for k in (0, .1, .2, .5, 1):                 # (FD, balanced; same samples
+            cell(r, "X1", "base", "jump", "robust", "all", N, 6, "bal", k, 0,  # as I1)
+                 "XTH", 0, 0, methods=("fd",), gridtype="uniform")
     for miss in ("bal", "gap30"):                    # I6 restricted lags
         for k in (0, 1):
             cell(r, "I6", "base", "jump", "robust", "L3", 400, 6, miss, k, 0, "FULL", 500, 46)

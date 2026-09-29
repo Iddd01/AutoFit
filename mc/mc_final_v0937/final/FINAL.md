@@ -21,7 +21,7 @@ or the model (kink). 500 replications per cell; FD and FOD are paired.
 | P5 | T = 10; N 200/400; all lags, lags 1–3, `collapse` |
 | P6 | Windmeijer (jump, kappa 1); kink model, robust and Windmeijer |
 
-`final_inf_cells.csv` (192 cells, 96,000 fits)
+`final_inf_cells.csv` (202 cells, 101,000 fits)
 
 | Block | Mode | Design |
 |---|---|---|
@@ -31,6 +31,7 @@ or the model (kink). 500 replications per cell; FD and FOD are paired.
 | I4 | CI | kink model; N 400/800; balanced/gap30 |
 | I5 | CI: `citest(.25 + c)`, c .10/.25/.50 | kappa 0/.5/1; N 400 balanced/gap30/attr15; N 800 balanced |
 | I6 | FULL and CI | lags 1–3; N 400; balanced/gap30; kappa 0/1; c 0/.25/.50 |
+| X1 | XTH: Seo–Shin via `xthenreg` | FD; balanced; N 400/800; kappa 0/.1/.2/.5/1; same samples as I1; `grid_num(46) trim_rate(.1)`; their asymptotic 95% interval for gamma is stored in `ci_lo`/`ci_hi` |
 
 `make_cells.py` generates both files.
 
@@ -55,6 +56,12 @@ covariance, instrument set and block are absent): FD/FOD and all cells of a
 DGP, N, T and missingness pattern share the outer sample. Base-DGP cells
 therefore reuse the samples of the checking runs. The bootstrap seed has its
 own namespace (424242) and excludes method, kappa, c, model and covariance.
+
+## Requirements
+
+The X1 cells call `xthenreg` (Seo, Kim and Kim 2019, SSC) and its dependency
+`moremata`: `ssc install xthenreg` and `ssc install moremata` before the run.
+`run_tonight.ps1` checks both first (`preflight.do`).
 
 ## Run
 

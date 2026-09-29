@@ -71,8 +71,12 @@ assert missing_seed==700000001+mod(hh*1009+mc*10007+pc*101+7919,699999999)
 assert boot_seed==1400000001+mod(hh*1013+mc*10007+pc*101+B*131+grid*137+gridci*139+ivc*151+424242,699999999)
 drop spc qc mc pc ivc hh offset
 * result contracts
-assert rc==0 | (missing(version_ok) & missing(twostep) & missing(gamma_hat))
-assert version_ok==1 & inlist(twostep,0,1) & !missing(gamma_hat) if rc==0
+assert rc==0 | (missing(version_ok) & missing(twostep)) & (mode=="XTH" | missing(gamma_hat))
+assert version_ok==1 & inlist(twostep,0,1) & !missing(gamma_hat) if rc==0 & mode!="XTH"
+* XTH (xthenreg): a delivered fit has a threshold estimate; its interval is
+* the Seo-Shin asymptotic 95% interval, stored in ci_lo/ci_hi
+assert !missing(gamma_hat) & missing(version_ok) & missing(citest_status) if rc==0 & mode=="XTH"
+assert method=="fd" & miss=="balanced" if mode=="XTH"
 gen double cit=cond(inlist(mode,"CI","FULL") & dgp!="linear",.25+c,.)
 assert missing(citest_status) if missing(cit) | rc!=0
 assert abs(citest_gamma-cit)<=1e-12 & inrange(citest_status,1,6) & ///
@@ -90,7 +94,7 @@ bysort dgp N T miss missp rep (cell_id): assert dgp_seed==dgp_seed[1] & ///
     missing_seed==missing_seed[1] & units_realized==units_realized[1] & ///
     analysis_observed==analysis_observed[1]
 * one FD and one FOD row per pair and replication
-bysort pair_id rep: assert _N==2 & method[1]!=method[2]
+bysort pair_id rep: assert (_N==2 & method[1]!=method[2]) | (_N==1 & mode=="XTH")
 gen byte formal=${fin_formal}
 * truths
 gen double t_rho=cond(dgp=="persist",.9,.6)

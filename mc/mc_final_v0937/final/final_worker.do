@@ -58,6 +58,22 @@ else {
 import delimited using final_cells.csv, clear case(preserve) asdouble ///
     stringcols(1 3 4 5 6 7 8 11 15 20 21)
 local ncells = _N
+* XTH cells run Seo and Shin's (2016) implementation, xthenreg (SSC, with
+* moremata): FD, balanced panels, its own uniform grid over the p5-p95 range
+* of q, and their asymptotic 95% interval for the threshold.
+quietly count if mode=="XTH"
+if r(N) {
+    capture which xthenreg
+    if _rc {
+        di as err "final_worker: XTH cells need xthenreg; run ssc install xthenreg"
+        exit 111
+    }
+    capture mata: mm_quantile((0\1), 1, .5)
+    if _rc {
+        di as err "final_worker: XTH cells need moremata; run ssc install moremata"
+        exit 111
+    }
+}
 forvalues j=1/`ncells' {
     foreach nm of local CELLVARS {
         local c`j'_`nm' = `nm'[`j']
@@ -188,16 +204,23 @@ forvalues j=1/`ncells' {
         quietly count if `_utag' == 1
         local units_realized = r(N)
         *----- estimate -----
-        if "`mode'"=="POINT" local infopt "noboot"
+        if inlist("`mode'","POINT","XTH") local infopt "noboot"
         else {
             local infopt "boot(`B') gridci(`gridci') boottype(wild) rseed(`boot_seed')"
             if "`mode'"=="CI" local infopt "`infopt' notest"
             if !missing(`cit') local infopt "`infopt' citest(`cit')"
         }
-        capture quietly xtdpthresh y if analysis, qx(q) `qopt' method(`method') ///
-            `ivopt' grid(`grid') gridtype(`gridtype') gridsample(`gridsample') ///
-            trim(`trim') `refopt' `specopt' `infopt' coefboot(none) ///
-            history(panel) level(95) vce(`vce') bwscale(1.5) nowarn
+        if "`mode'"=="XTH" {
+            * y, threshold variable q, regressor q (as in the DGP)
+            capture quietly xthenreg y q q if analysis, grid_num(`grid') ///
+                trim_rate(`trim') h_0(1.5)
+        }
+        else {
+            capture quietly xtdpthresh y if analysis, qx(q) `qopt' method(`method') ///
+                `ivopt' grid(`grid') gridtype(`gridtype') gridsample(`gridsample') ///
+                trim(`trim') `refopt' `specopt' `infopt' coefboot(none) ///
+                history(panel) level(95) vce(`vce') bwscale(1.5) nowarn
+        }
         local rc=_rc
         foreach nm in version_ok twostep gamma_hat b_rho b_q b_cons b_qd b_rhod ///
             se_rho se_q se_cons se_qd se_rhod sc_rho sc_q sc_cons sc_qd sc_rhod ///
@@ -207,7 +230,33 @@ forvalues j=1/`ncells' {
             citest_status citest_draws seed_citest p_lin lin_valid {
             local `nm'=.
         }
-        if `rc'==0 {
+        if `rc'==0 & "`mode'"=="XTH" {
+            * xthenreg exits with rc 0 on its own errors: success = a threshold estimate
+            capture local gamma_hat=_b[r]
+            local names "rho q cons qd rhod"
+            local labels "Lag_y_b q_b cons_d q_d Lag_y_d"
+            local ii=0
+            foreach nm of local names {
+                local ++ii
+                local label: word `ii' of `labels'
+                capture local b_`nm'=_b[`label']
+                capture local se_`nm'=_se[`label']
+            }
+            local N_units=e(N)
+            local ci_incomplete=0
+            local ci_delivered=0
+            capture matrix XC=e(CI)
+            if !_rc & !missing(`gamma_hat') {
+                local rr=rownumb(XC,"r")
+                if !missing(`rr') {
+                    local ci_lo=XC[`rr',1]
+                    local ci_hi=XC[`rr',2]
+                    local ci_delivered=!missing(`ci_lo',`ci_hi')
+                }
+            }
+            if missing(`gamma_hat') local rc=498
+        }
+        else if `rc'==0 {
             local version_ok=("`e(cmd)'"=="xtdpthresh" & "`e(cmdversion)'"=="0.9.37")
             if !`version_ok' {
                 di as err "final_worker: expected xtdpthresh 0.9.37; got `e(cmd)' `e(cmdversion)'"

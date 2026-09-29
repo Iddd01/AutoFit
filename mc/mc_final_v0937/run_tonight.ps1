@@ -43,6 +43,16 @@ function Step($name,[scriptblock]$body){
 if(@(Get-Process StataMP-64 -ErrorAction SilentlyContinue).Count -gt 0){throw 'Close every Stata before starting.'}
 Note "run_tonight: root=$root NShard=$NShard"
 
+# preflight: xthenreg and moremata (XTH cells) must be installed
+$pre=Join-Path $root 'preflight.log'
+Remove-Item -LiteralPath $pre -ErrorAction SilentlyContinue
+$null=Start-Process -FilePath $Stata -ArgumentList '/e do preflight.do' -WorkingDirectory $root -WindowStyle Hidden -PassThru -Wait
+if(-not (Select-String -LiteralPath $pre -Pattern '^PREFLIGHT_PASS\s*$' -Quiet)){
+ Note 'preflight failed: install xthenreg and moremata (ssc install xthenreg; ssc install moremata); see preflight.log'
+ throw 'preflight failed'
+}
+Note 'preflight: xthenreg and moremata found'
+
 # 0. version check: 0.9.35/0.9.36 vs 0.9.37 on common samples
 $null=Step 'version_check' {
  $dir=Join-Path $root 'version_check'
