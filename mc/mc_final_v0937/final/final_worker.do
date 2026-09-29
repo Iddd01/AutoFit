@@ -91,25 +91,29 @@ forvalues j=1/`ncells' {
     if ${fin_gridci}>0 & `gridci'>0 local gridci=${fin_gridci}
     * DGP constants
     local RHOY  = cond("`dgp'"=="persist", .9, .6)
-    local TBURN = cond("`dgp'"=="persist", 50, 20)
+    local SS = inlist("`dgp'","ss_jump","ss_cont")
+    local TBURN = cond("`dgp'"=="persist" | `SS', 50, 20)
     local TMAX  = `T' + `TBURN'
     local T_qd    = cond("`dgp'"=="linear", 0, 2)
     local T_consd = cond("`dgp'"=="linear", 0, `kappa' - .5)
-    local GAMMA0  = cond("`dgp'"=="linear", ., .25)
-    local SPCODE = cond(inlist("`dgp'","base","linear"),1,cond("`dgp'"=="endog",2,cond("`dgp'"=="persist",3,4)))
+    local GAMMA0  = cond("`dgp'"=="linear", ., cond("`dgp'"=="ss_jump", 0, cond("`dgp'"=="ss_cont", .8, .25)))
+    local SPCODE = cond(inlist("`dgp'","base","linear"),1,cond("`dgp'"=="endog",2,cond("`dgp'"=="persist",3,cond("`dgp'"=="heavy",4,cond("`dgp'"=="ss_jump",5,6)))))
     local QCODE  = cond("`dgp'"=="endog",2,1)
     local MCODE  = cond("`miss'"=="balanced",1,cond("`miss'"=="mcar",2,3))
     local PCODE  = round(`missp'*1000000)
     local IVCODE = cond("`iv'"=="all",1,cond("`iv'"=="L3",2,3))
     * estimation options
     local qopt = cond("`dgp'"=="endog", "endogenous(q)", "predetermined(q)")
+    * Seo-Shin designs: q = y_{t-1} is the threshold variable only (L.y is the
+    * regressor); instruments are the past levels of y, as in their Section 6
+    if `SS' local qopt ""
     local ivopt ""
     if "`iv'"=="L3" local ivopt "maxlag(1 3)"
     if "`iv'"=="collapse" local ivopt "collapse"
     local specopt = cond("`spec'"=="kink", "kink", "")
     local refopt = cond(`refine'>0, "refine(`refine')", "")
     local cit = .
-    if inlist("`mode'","CI","FULL") local cit = .25 + `c'
+    if inlist("`mode'","CI","FULL") local cit = `GAMMA0' + `c'
     forvalues rep=1/`R' {
         local ordinal=`ordinal'+1
         if mod(`ordinal'-1,${fin_nshard})+1 != `SHARD' continue
@@ -132,6 +136,24 @@ forvalues j=1/`ncells' {
         quietly gen long id = ceil(_n/`TMAX')
         quietly bysort id: gen int t = _n
         quietly xtset id t
+        if `SS' {
+            * Seo and Shin (2016, eqs. 16-17): SETAR panels, no unit effect;
+            * q_it = y_i,t-1 (the burn-in supplies y_i0 for the first period)
+            quietly gen double u = rnormal()
+            quietly gen double y = .
+            quietly bysort id (t): replace y = 0 if _n == 1
+            if "`dgp'"=="ss_jump" {
+                quietly bysort id (t): replace y = cond(y[_n-1]<=0, .7-.5*y[_n-1], -1.8+.7*y[_n-1]) + u if _n > 1
+            }
+            else {
+                quietly bysort id (t): replace y = cond(y[_n-1]<=.8, .52+.6*y[_n-1], 1.48-.6*y[_n-1]) + .5*u if _n > 1
+            }
+            quietly bysort id (t): gen double q = y[_n-1]
+            quietly gen byte analysis = (t > `TBURN')
+            quietly drop if t <= `TBURN'
+            quietly xtset id t
+        }
+        else {
         if "`dgp'"=="heavy" {
             quietly gen double es = rt(5)/sqrt(5/3)
             quietly gen double e  = es*.5
@@ -161,6 +183,7 @@ forvalues j=1/`ncells' {
         quietly gen byte analysis = (t > `TBURN')
         quietly drop if t <= `TBURN'
         quietly xtset id t
+        }
         *----- missingness (as study_b_worker.do) -----
         if "`miss'" == "mcar" & `missp' > 0 {
             quietly set seed `missing_seed'
@@ -197,6 +220,9 @@ forvalues j=1/`ncells' {
             quietly drop _na
             quietly xtset id t
         }
+        * Seo-Shin designs: after missingness q is the observed lag of y
+        * (missing after a gap); the first row keeps y_i0
+        if `SS' quietly bysort id (t): replace q = L.y if _n > 1
         quietly count if analysis
         local analysis_observed = r(N)
         tempvar _utag
@@ -217,8 +243,14 @@ forvalues j=1/`ncells' {
             * endogenous(q): xthenreg has no predetermined option, and without
             * it q would instrument itself (invalid here, as q_t depends on
             * e_{t-1}); endogenous(q) uses lags from t-2, which are valid
-            capture quietly xthenreg y q if analysis, endogenous(q) ///
-                grid_num(`grid') trim_rate(`trim') h_0(1.5)
+            if `SS' {
+                capture quietly xthenreg y q if analysis, ///
+                    grid_num(`grid') trim_rate(`trim') h_0(1.5)
+            }
+            else {
+                capture quietly xthenreg y q if analysis, endogenous(q) ///
+                    grid_num(`grid') trim_rate(`trim') h_0(1.5)
+            }
         }
         else {
             capture quietly xtdpthresh y if analysis, qx(q) `qopt' method(`method') ///

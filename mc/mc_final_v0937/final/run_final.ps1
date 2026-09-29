@@ -10,7 +10,7 @@ param(
  [ValidateRange(0,10000)][int]$B=0,
  [ValidateRange(0,10000)][int]$Grid=0,
  [ValidateRange(0,10000)][int]$GridCI=0,
- [ValidateSet('','final_point_cells.csv','final_inf_cells.csv')][string]$Registry='',
+ [ValidateSet('','final_point_cells.csv','final_inf_cells.csv','final_ss_cells.csv')][string]$Registry='',
  [string]$Stata='C:\Program Files\Stata17\StataMP-64.exe'
 )
 $ErrorActionPreference='Stop'
@@ -51,7 +51,7 @@ function Live-Jobs {
 if($Action -eq 'Fresh') {
  if(Test-Path -LiteralPath $run){throw 'Run already exists; use a new RunId or Resume.'}
  if(($B -gt 0 -and $B -lt 10)-or($Grid -gt 0 -and $Grid -lt 10)-or($GridCI -gt 0 -and $GridCI -lt 10)){throw 'Positive B/Grid/GridCI overrides must be at least 10.'}
- if(-not $Registry){throw '-Registry final_point_cells.csv or final_inf_cells.csv is required with Fresh.'}
+ if(-not $Registry){throw '-Registry final_point_cells.csv, final_inf_cells.csv or final_ss_cells.csv is required with Fresh.'}
  $cells=@(Import-Csv -LiteralPath (Join-Path $source $Registry))
  $expected=0
  foreach($c in $cells){$expected+=if($RepCap){[Math]::Min($RepCap,[int]$c.R)}else{[int]$c.R}}

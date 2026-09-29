@@ -14,7 +14,7 @@ R = 500
 
 
 def cell(rows, block, dgp, spec, vce, iv, N, T, miss, kappa, c, mode, B, gridci,
-         methods=("fd", "fod"), gridtype="quantile"):
+         methods=("fd", "fod"), gridtype="quantile", reps=R):
     m, p = MISS[miss]
     k = "%03d" % round(100 * kappa)
     cc = "%03d" % round(100 * c)
@@ -22,7 +22,7 @@ def cell(rows, block, dgp, spec, vce, iv, N, T, miss, kappa, c, mode, B, gridci,
     for method in methods:
         rows.append(dict(block=block, cell_id=0, pair_id=pair, dgp=dgp, spec=spec,
                          method=method, vce=vce, iv=iv, N=N, T=T, miss=m, missp=p,
-                         kappa=kappa, c=c, mode=mode, R=R, B=B, grid=46, gridci=gridci,
+                         kappa=kappa, c=c, mode=mode, R=reps, B=B, grid=46, gridci=gridci,
                          gridtype=gridtype, gridsample="observed", trim=.10, refine=0))
 
 
@@ -83,7 +83,24 @@ def inf():
     return r
 
 
-for name, rows in (("final_point_cells.csv", point()), ("final_inf_cells.csv", inf())):
+def ss():
+    """Seo and Shin (2016, Section 6): SETAR panels (16) jump and (17)
+    continuous, q = y_{t-1}, T = 10, n = 50/100/200 (+400), 1000 replications;
+    xtdpthresh (FD/FOD x balanced/gap30/attr15, grid bootstrap at gamma0)
+    and xthenreg (FD, balanced) on the same samples."""
+    r = []
+    for dgp in ("ss_jump", "ss_cont"):
+        for N in (50, 100, 200, 400):
+            for miss in MISS:
+                cell(r, "SS1", dgp, "jump", "robust", "all", N, 10, miss, 0, 0, "CI", 500, 46,
+                     reps=1000)
+            cell(r, "SX1", dgp, "jump", "robust", "all", N, 10, "bal", 0, 0, "XTH", 0, 0,
+                 methods=("fd",), gridtype="uniform", reps=1000)
+    return r
+
+
+for name, rows in (("final_point_cells.csv", point()), ("final_inf_cells.csv", inf()),
+                   ("final_ss_cells.csv", ss())):
     for i, row in enumerate(rows, 1):
         row["cell_id"] = i
     assert len({(x["pair_id"], x["method"]) for x in rows}) == len(rows)
@@ -93,4 +110,4 @@ for name, rows in (("final_point_cells.csv", point()), ("final_inf_cells.csv", i
         for row in rows:
             row = {k: (("%g" % v) if isinstance(v, float) else v) for k, v in row.items()}
             w.writerow(row)
-    print(name, len(rows), "cells", len(rows) * R, "fits")
+    print(name, len(rows), "cells", sum(x["R"] for x in rows), "fits")

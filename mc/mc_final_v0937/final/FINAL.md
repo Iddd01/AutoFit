@@ -33,7 +33,15 @@ or the model (kink). 500 replications per cell; FD and FOD are paired.
 | I6 | FULL and CI | lags 1–3; N 400; balanced/gap30; kappa 0/1; c 0/.25/.50 |
 | X1 | XTH: Seo–Shin via `xthenreg` | FD; balanced; N 400/800; kappa 0/.1/.2/.5/1; same samples as I1; `xthenreg y q, endogenous(q) grid_num(46) trim_rate(.1)` (xthenreg has no predetermined option; its default would instrument q by itself, invalid in this DGP); their asymptotic 95% interval for gamma is stored in `ci_lo`/`ci_hi` |
 
-`make_cells.py` generates both files.
+`final_ss_cells.csv` (56 cells, 56,000 fits): replication of Seo and Shin
+(2016, Section 6) — SETAR panels (their eq. 16, jump, gamma = 0; eq. 17,
+continuous, gamma = .8), q = y_{t-1}, T = 10, n 50/100/200 (+400), 1000
+replications. SS1: xtdpthresh FD/FOD x balanced/gap30/attr15, grid bootstrap
+at gamma0 (`citest`); SX1: xthenreg, FD, balanced, same samples (their
+asymptotic interval). Compare with their Tables 1–3 (bias, SD, MSE) and
+Table 7 (coverage, h = 3/2).
+
+`make_cells.py` generates the three files.
 
 ## Outputs (per run folder `final_runs/<RunId>`)
 

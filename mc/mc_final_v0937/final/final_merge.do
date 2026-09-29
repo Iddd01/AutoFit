@@ -61,7 +61,7 @@ bysort cell_id (rep): assert _N==R & rep==_n
 assert shard==mod(offset+rep-1,${fin_nshard})+1
 assert master==${fin_master}
 * seed contract
-gen byte spc=cond(inlist(dgp,"base","linear"),1,cond(dgp=="endog",2,cond(dgp=="persist",3,4)))
+gen byte spc=cond(inlist(dgp,"base","linear"),1,cond(dgp=="endog",2,cond(dgp=="persist",3,cond(dgp=="heavy",4,cond(dgp=="ss_jump",5,6)))))
 gen byte qc=cond(dgp=="endog",2,1)
 gen byte mc=cond(miss=="balanced",1,cond(miss=="mcar",2,3))
 gen double pc=round(missp*1000000)
@@ -78,7 +78,8 @@ assert version_ok==1 & inlist(twostep,0,1) & !missing(gamma_hat) if rc==0 & mode
 * the Seo-Shin asymptotic 95% interval, stored in ci_lo/ci_hi
 assert !missing(gamma_hat) & missing(version_ok) & missing(citest_status) if rc==0 & mode=="XTH"
 assert method=="fd" & miss=="balanced" if mode=="XTH"
-gen double cit=cond(inlist(mode,"CI","FULL") & dgp!="linear",.25+c,.)
+gen double gamma0=cond(dgp=="linear",.,cond(dgp=="ss_jump",0,cond(dgp=="ss_cont",.8,.25)))
+gen double cit=cond(inlist(mode,"CI","FULL") & dgp!="linear",gamma0+c,.)
 assert missing(citest_status) if missing(cit) | rc!=0
 assert abs(citest_gamma-cit)<=1e-12 & inrange(citest_status,1,6) & ///
     seed_citest==mod(boot_seed+477377,2147483648) if !missing(cit) & rc==0
@@ -98,12 +99,15 @@ bysort dgp N T miss missp rep (cell_id): assert dgp_seed==dgp_seed[1] & ///
 bysort pair_id rep: assert (_N==2 & method[1]!=method[2]) | (_N==1 & mode=="XTH")
 gen byte formal=${fin_formal}
 * truths
-gen double t_rho=cond(dgp=="persist",.9,.6)
-gen double t_q=1
+gen byte ss=inlist(dgp,"ss_jump","ss_cont")
+gen double t_rho=cond(dgp=="persist",.9,cond(dgp=="ss_jump",-.5,.6))
+gen double t_q=cond(ss,.,1)
 gen double t_cons=cond(dgp=="linear" | spec=="kink",cond(spec=="kink",.,0),kappa-.5)
-gen double t_qd=cond(dgp=="linear",0,2)
+replace t_cons=cond(dgp=="ss_jump",-2.5,.96) if ss
+gen double t_qd=cond(ss,.,cond(dgp=="linear",0,2))
 gen double t_rhod=cond(spec=="kink",.,0)
-gen double gamma0=cond(dgp=="linear",.,.25)
+replace t_rhod=cond(dgp=="ss_jump",1.2,-1.2) if ss
+drop ss
 sort cell_id rep
 save final_all.dta, replace
 export delimited using final_all.csv, replace
