@@ -72,6 +72,5 @@ The X1 cells call `xthenreg` (Seo, Kim and Kim 2019, SSC) and its dependency
 .\run_final.ps1 -Action Merge -RunId point_final
 ```
 
-and the same with `final_inf_cells.csv`. `..\run_tonight.ps1` runs the
-version check and both registries (smoke, formal, merge) in sequence.
+and the same with `final_inf_cells.csv`. `..\run_tonight.ps1` runs both registries (smoke, formal, merge) in sequence.
 Rough cost on 28 cores: POINT about 1–2 hours, INF about 5 hours.

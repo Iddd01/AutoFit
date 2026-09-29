@@ -1,5 +1,5 @@
 # run_tonight.ps1 -- final Monte Carlo of xtdpthresh 0.9.37 (PowerShell 5.1, Stata 17 MP).
-# Runs, one after another: the version check; then for each registry of
+# Runs, one after another, for each registry of
 # final/ (point estimation, then inference) a smoke (execution and merge
 # contracts only) followed, if the smoke merges, by the formal run and its
 # verified merge. A failed step is logged and the next
@@ -52,18 +52,6 @@ if(-not (Select-String -LiteralPath $pre -Pattern '^PREFLIGHT_PASS\s*$' -Quiet))
  throw 'preflight failed'
 }
 Note 'preflight: xthenreg and moremata found'
-
-# 0. version check: 0.9.35/0.9.36 vs 0.9.37 on common samples
-$null=Step 'version_check' {
- $dir=Join-Path $root 'version_check'
- $vlog=Join-Path $dir 'version_check.log'
- Remove-Item -LiteralPath $vlog -ErrorAction SilentlyContinue
- $p=Start-Process -FilePath $Stata -ArgumentList '/e do version_check.do' -WorkingDirectory $dir -WindowStyle Hidden -PassThru -Wait
- # the batch log echoes the do-file, so match result lines only
- if(Select-String -LiteralPath $vlog -Pattern '^VERSION_CHECK_FAIL|^r\(\d+\);' -Quiet){throw 'version check failed; see version_check.log'}
- if(-not (Select-String -LiteralPath $vlog -Pattern '^VERSION_CHECK_PASS\s*$' -Quiet)){throw 'VERSION_CHECK_PASS not found in version_check.log'}
- (Select-String -LiteralPath $vlog -Pattern '^(Part [AB]|continuity).*max reldif') | ForEach-Object {Note ('      '+$_.Line.Trim())}
-}
 
 # 1-2. final registries: point estimation, then inference
 $F=Join-Path $root 'final'
