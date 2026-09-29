@@ -31,7 +31,7 @@ or the model (kink). 500 replications per cell; FD and FOD are paired.
 | I4 | CI | kink model; N 400/800; balanced/gap30 |
 | I5 | CI: `citest(.25 + c)`, c .10/.25/.50 | kappa 0/.5/1; N 400 balanced/gap30/attr15; N 800 balanced |
 | I6 | FULL and CI | lags 1–3; N 400; balanced/gap30; kappa 0/1; c 0/.25/.50 |
-| X1 | XTH: Seo–Shin via `xthenreg` | FD; balanced; N 400/800; kappa 0/.1/.2/.5/1; same samples as I1; `grid_num(46) trim_rate(.1)`; their asymptotic 95% interval for gamma is stored in `ci_lo`/`ci_hi` |
+| X1 | XTH: Seo–Shin via `xthenreg` | FD; balanced; N 400/800; kappa 0/.1/.2/.5/1; same samples as I1; `xthenreg y q, endogenous(q) grid_num(46) trim_rate(.1)` (xthenreg has no predetermined option; its default would instrument q by itself, invalid in this DGP); their asymptotic 95% interval for gamma is stored in `ci_lo`/`ci_hi` |
 
 `make_cells.py` generates both files.
 

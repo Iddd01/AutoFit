@@ -210,10 +210,15 @@ forvalues j=1/`ncells' {
             if "`mode'"=="CI" local infopt "`infopt' notest"
             if !missing(`cit') local infopt "`infopt' citest(`cit')"
         }
+        * xthenreg can exit with rc 0 without posting: never read stale e()
+        ereturn clear
         if "`mode'"=="XTH" {
-            * y, threshold variable q, regressor q (as in the DGP)
-            capture quietly xthenreg y q q if analysis, grid_num(`grid') ///
-                trim_rate(`trim') h_0(1.5)
+            * y, threshold variable q; q enters as a regressor through
+            * endogenous(q): xthenreg has no predetermined option, and without
+            * it q would instrument itself (invalid here, as q_t depends on
+            * e_{t-1}); endogenous(q) uses lags from t-2, which are valid
+            capture quietly xthenreg y q if analysis, endogenous(q) ///
+                grid_num(`grid') trim_rate(`trim') h_0(1.5)
         }
         else {
             capture quietly xtdpthresh y if analysis, qx(q) `qopt' method(`method') ///
@@ -287,6 +292,8 @@ forvalues j=1/`ncells' {
                 local label: word `ii' of `labels'
                 capture local b_`nm'=_b[`label']
                 capture local se_`nm'=_se[`label']
+                * without the joint variance, e(V) is already conditional on gamma-hat
+                if `joint_vce'==0 local sc_`nm'=`se_`nm''
                 if `hasvc' {
                     local col=colnumb(VC,"`label'")
                     if !missing(`col') {

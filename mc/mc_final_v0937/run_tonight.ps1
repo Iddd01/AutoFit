@@ -20,9 +20,9 @@ function Wait-Stata {
  # all shards of a step must finish; two empty polls a minute apart
  Start-Sleep -Seconds 90
  $empty=0
- $deadline=(Get-Date).AddHours(14)
+ $deadline=(Get-Date).AddHours(24)
  while($empty -lt 2){
-  if((Get-Date) -gt $deadline){throw 'Stata still running after 14 hours'}
+  if((Get-Date) -gt $deadline){throw 'Stata still running after 24 hours'}
   $n=@(Get-Process StataMP-64 -ErrorAction SilentlyContinue).Count
   if($n -eq 0){$empty++}else{$empty=0}
   Start-Sleep -Seconds 60

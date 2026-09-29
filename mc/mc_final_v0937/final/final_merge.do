@@ -122,7 +122,7 @@ preserve
     gen byte cit_rej=(citest_accept==0) if cit_eval==1
     gen byte hcov=(ci_lo<=gamma0 & gamma0<=ci_hi) if ci_delivered==1 & !missing(gamma0)
     gen double hlen=ci_hi-ci_lo if ci_delivered==1
-    gen byte bnd=ci_boundary if ci_delivered==1
+    gen byte bnd=(ci_boundary>0) if ci_delivered==1 & !missing(ci_boundary)
     gen byte lin_rej=(p_lin<.05) if !missing(p_lin)
     gen byte lin_del=!missing(p_lin) if inlist(mode,"FULL","LIN") & ok
     collapse (count) n_rep=rep n_gamma=eg n_hansen=hj n_ar2=a2 n_cit=cit_rej ///
