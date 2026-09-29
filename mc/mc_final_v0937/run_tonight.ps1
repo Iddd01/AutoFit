@@ -1,7 +1,8 @@
-# run_tonight.ps1 -- overnight sequence for xtdpthresh 0.9.37 (PowerShell 5.1, Stata 17 MP).
-# Runs, one after another: the version check; then for each study a smoke
-# (execution and merge contracts only) followed, if the smoke merges, by the
-# formal run and its verified merge. A failed step is logged and the next
+# run_tonight.ps1 -- final Monte Carlo of xtdpthresh 0.9.37 (PowerShell 5.1, Stata 17 MP).
+# Runs, one after another: the version check; then for each registry of
+# final/ (point estimation, then inference) a smoke (execution and merge
+# contracts only) followed, if the smoke merges, by the formal run and its
+# verified merge. A failed step is logged and the next
 # study continues. Keep every other Stata closed: the script waits for all
 # StataMP-64 processes to finish between steps.
 [CmdletBinding()]
@@ -54,45 +55,22 @@ $null=Step 'version_check' {
  (Select-String -LiteralPath $vlog -Pattern '^(Part [AB]|continuity).*max reldif') | ForEach-Object {Note ('      '+$_.Line.Trim())}
 }
 
-# 1. Study A core (point estimation, 116 cells)
-$A=Join-Path $root 'study_a'
-Push-Location $A
-try {
- $smoke="smoke_a_$Tag"; $formal="final_a_$Tag"
- $ok=Step 'study_a smoke' {
-  & (Join-Path $A 'run_study_a.ps1') -Fresh -RunId $smoke -NShard 6 -RepCap 1 -Stata $Stata
-  Wait-Stata
-  & (Join-Path $A "runs\$smoke\verify_and_merge_study_a.ps1") -RunId $smoke
- }
- if($ok){
-  $null=Step 'study_a formal' {
-   & (Join-Path $A 'run_study_a.ps1') -Fresh -RunId $formal -NShard $NShard -Stata $Stata
-   Wait-Stata
-   & (Join-Path $A "runs\$formal\verify_and_merge_study_a.ps1") -RunId $formal
-  }
- }
-} finally {Pop-Location}
-
-# 2..5: blocks run through the run_supplement.ps1 / run_supp2.ps1 launchers
-function Block($label,$dir,$launcher,$smoke,$formal,$extra,$smokeOpts){
+# 1-2. final registries: point estimation, then inference
+$F=Join-Path $root 'final'
+function Block($label,$registry,$smoke,$formal){
  $ok=Step "$label smoke" {
-  & (Join-Path $dir $launcher) -Action Fresh -RunId $smoke -NShard 4 -RepCap 1 @smokeOpts @extra -Stata $Stata
+  & (Join-Path $F 'run_final.ps1') -Action Fresh -Registry $registry -RunId $smoke -NShard 4 -RepCap 1 -B 19 -Grid 10 -GridCI 10 -Stata $Stata
   Wait-Stata
-  & (Join-Path $dir $launcher) -Action Merge -RunId $smoke -Stata $Stata
+  & (Join-Path $F 'run_final.ps1') -Action Merge -RunId $smoke -Stata $Stata
  }
  if($ok){
   $null=Step "$label formal" {
-   & (Join-Path $dir $launcher) -Action Fresh -RunId $formal -NShard $NShard @extra -Stata $Stata
+   & (Join-Path $F 'run_final.ps1') -Action Fresh -Registry $registry -RunId $formal -NShard $NShard -Stata $Stata
    Wait-Stata
-   & (Join-Path $dir $launcher) -Action Merge -RunId $formal -Stata $Stata
+   & (Join-Path $F 'run_final.ps1') -Action Merge -RunId $formal -Stata $Stata
   }
  }
 }
-$quick=@{B=19;Grid=10;GridCI=10}
-$none=@{}
-$B=Join-Path $root 'study_b_supp'
-Block 'study_a supplement' $A 'run_supplement.ps1' "a_supp_smoke_$Tag" "a_supp_final_$Tag" $none @{Grid=10}
-Block 'kink supplement' $B 'run_supplement.ps1' "kink_smoke_$Tag" "kink_final_$Tag" $none $quick
-Block 'power (FD/FOD, maxlag 1 3)' $B 'run_supp2.ps1' "power_smoke_$Tag" "power_final_$Tag" $none $quick
-Block 'power (Gong-Seo geometry)' $B 'run_supp2.ps1' "powergs_smoke_$Tag" "powergs_final_$Tag" @{Registry='supp2b_cells.csv'} $quick
+Block 'point estimation' 'final_point_cells.csv' "point_smoke_$Tag" "point_final_$Tag"
+Block 'inference' 'final_inf_cells.csv' "inf_smoke_$Tag" "inf_final_$Tag"
 Note 'run_tonight: finished'
